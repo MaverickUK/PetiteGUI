@@ -49,11 +49,21 @@ On a 4:3 monitor, a 640×200 pixel is 2.4 times taller than it is wide. So anyth
 
 The system BIOS keeps an 8×8 font for characters 0–127 at `F000:FA6E`, on every PC whatever the video card. PetiteGUI draws from it directly, so it needs no font file. Disabled text in Paper is dithered (every other pixel), since there's no grey.
 
+`gfx_text` hands each run of characters that the clip doesn't cut to the driver's `text`, which sets the card up once for the run (on the EGA, the colour in set/reset) and draws it a glyph row at a time. That row is `drawasm.asm`, the one loop in assembly: `tools/bench.sh` found text the inner loop worth it, a quarter faster than the C. Characters the clip cuts, and dithered ones, go a row at a time through `gfx_bits`, which clips.
+
 ## Redrawing
 
 There's no off-screen buffer. When something changes, `redraw()` draws the rectangle that changed, back to front, clipped to it: the desktop pattern, the icons, the windows in z-order, the menu bar. A window moving redraws where it was and where it is.
 
-What's drawn is kept to what changed, so the screen doesn't flash while it's covered and drawn again: if one window covers the whole rectangle, drawing starts from that window; selecting a row redraws the old and new rows; moving through a menu redraws the item left and the item reached.
+What's drawn is kept to what changed, so the screen doesn't flash while it's covered and drawn again, and a slow PC isn't kept busy:
+
+- If one window covers the whole rectangle, drawing starts from that window; a window is redrawn as its own rectangle, then its two strips of shadow.
+- A window coming to the front redraws only where the windows above it covered it, and the title bars and scroll bars of it and of the window that was in front (`active_parts`, less what the new front window covers: `rect_subtract`). Opening one draws it once; closing one draws what it covered, then the rest of the new front window's title bar and scroll bar.
+- Scrolling a list or the editor by less than a window's height **moves the rows already drawn** (`gfx_scroll`: a copy of each byte row on the CGA, write mode 1 through the latches on the EGA), then draws only the rows that came into view, and the scroll bar. The rows move whole bytes, from the window's left frame to the scroll bar's left line, which are the same on every row, so they move too.
+- Selecting redraws the rows whose selection changed; moving through a menu, the item left and the item reached; typing in the editor, from the caret to the end of its line; moving the caret, the character it left and the one it reached, and the left half of the info line.
+- Inside a window, the parts the rectangle doesn't touch aren't worked out at all: rows above and below it aren't formatted, the title and the info line aren't `sprintf`ed, the scroll bar's sums aren't done. Each pixel of a window is filled once: the background goes under the title bar and beside the scroll bar, which fill themselves.
+
+`tools/dostest.sh` checks the lot: scenes 21 and 22 do all of these, a piece at a time, then dump the screen, draw it whole and dump it again, and the two must match to the byte. `PETITE /BENCH` (`tools/bench.sh`) times the common cases at PC/XT speed.
 
 Menus and alerts are different: they **save the pixels under them** (`gfx_save`) and put them back when they close, which is faster and needs no redraw of what's beneath. Paper's File menu, with its shadow, is about 1.9 KB; Ink's, in four planes, about 7.5 KB.
 
@@ -61,9 +71,14 @@ Dragging a window draws an XOR outline (drawn twice, it leaves the screen as it 
 
 ## The mouse
 
-The DOS mouse driver (`INT 33h`) reads the mouse and draws the pointer in modes 06h and 0Eh. PetiteGUI resets it after each mode change (function 0, so it learns the mode), sets the range to 640×200 and the pointer's shape (function 9), and hides the pointer around every drawing call (functions 2 and 1), since the driver saves and restores the pixels under it.
+The DOS mouse driver (`INT 33h`) reads the mouse and draws the pointer in modes 06h and 0Eh. PetiteGUI resets it after each mode change (function 0, so it learns the mode), sets the range to 640×200 and the pointer's shape (function 9), and hides the pointer around drawing, since the driver saves and restores the pixels under it. `mouse.c` counts the nesting itself, so the two ways of hiding can nest:
 
-The program polls: `mouse_read` (function 3) for the position and buttons, `kbhit` for keys. A press acts at once; anything held (dragging, menus, scroll arrows) loops until the button is let go.
+- `mouse_hide` (function 2) hides it wherever it is: for dragging outlines, menus and the like.
+- `mouse_hide_in`, which `redraw` uses, hides it only if it's over the area being drawn: in Paper, if it's there already it's hidden (function 2), and otherwise function 10h hides it only if it moves there before the drawing's done, so it doesn't blink while things change elsewhere. (DOSBox-X's driver only looks at function 10h's area when the pointer moves, hence the check first.) In Ink it hides the pointer everywhere: the driver draws the pointer from its interrupt, and on the EGA that would land in the middle of PetiteGUI's graphics controller settings.
+
+Function 1 shows it again, and also ends a function 10h area.
+
+The program polls: `mouse_read` (function 3) for the position and buttons, `kb_hit` for keys. A press acts at once; anything held (dragging, menus, scroll arrows) loops until the button is let go.
 
 ## Memory
 
@@ -163,7 +178,7 @@ The scan walks every directory under each `ScanPath` entry. `PETITE.IDX` records
 
 ## Next
 
-- Speed on a real 8088: the inner loops (fills, text, spans) into NASM, after measuring.
+- Trying it on a real PC: tearing (and whether to wait for the retrace), and the timings against DOSBox's.
 - More of GameMinder: sorting and filtering the games list, a game's details and play stats, adding and editing `!GM_INFO.TXT`.
 - Resizing windows; more than one directory window per drive; copying, moving and new folders; deleting folders.
 - The editor: horizontal scrolling with the mouse, undo.

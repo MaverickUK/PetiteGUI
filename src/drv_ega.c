@@ -11,10 +11,12 @@
 #include <conio.h>
 #include <i86.h>
 #include <string.h>
+#include "drawasm.h"
 #include "gfx.h"
 
-#define GC(i, v) (outp(0x3CE, (i)), outp(0x3CF, (v)))
-#define SEQ(i, v) (outp(0x3C4, (i)), outp(0x3C5, (v)))
+/* A 16-bit OUT writes the index to the port and the value to the next one, in one go. */
+#define GC(i, v) outpw(0x3CE, (unsigned)(((unsigned)(uint8_t)(v) << 8) | (i)))
+#define SEQ(i, v) outpw(0x3C4, (unsigned)(((unsigned)(uint8_t)(v) << 8) | (i)))
 #define ROW(y) ((uint8_t __far *)MK_FP(0xA000, (unsigned)(y) * 80))
 #define PLANE_BYTES 16000u
 
@@ -301,9 +303,43 @@ static void ega_palette(const uint8_t *map)
     int86x(0x10, &r, &r, &s);
 }
 
+/* Set/reset paints the colour; the bit mask picks the glyph's pixels in each byte, and the
+ * latches (loaded by a read) keep the rest. The registers are set once for the whole run. */
+static void ega_text(int x, int y, const uint8_t __far *font, const char *s, int n, uint8_t c)
+{
+    int r;
+
+    GC(0, c);
+    GC(1, 0x0F);
+    for (r = 0; r < 8; r++) /* drawasm.asm: the bit mask and the latches, byte by byte */
+        text_row_ega((unsigned)(y + r) * 80u + (unsigned)(x >> 3), s, n, FP_OFF(font) + r, FP_SEG(font), x & 7);
+    defaults();
+}
+
+/* Write mode 1: reading a byte loads all four planes into the latches, and writing anything
+ * puts them down at once. A byte at a time (a word copy would load the latches twice). */
+static void ega_copy_rows(int x, int y, int w, int h, int to_y)
+{
+    int r, i, nb = w >> 3, step = to_y > y ? -1 : 1, first = to_y > y ? h - 1 : 0;
+    volatile uint8_t latch;
+    uint8_t __far *src, __far *dst;
+
+    GC(5, 0x01);
+    for (r = first; r >= 0 && r < h; r += step) {
+        src = ROW(y + r) + (x >> 3);
+        dst = ROW(to_y + r) + (x >> 3);
+        for (i = 0; i < nb; i++) {
+            latch = src[i];
+            dst[i] = latch;
+        }
+    }
+    defaults();
+}
+
 const Driver drv_ega = {
     "Ink (EGA)",
     ega_init, ega_fill, ega_pattern, ega_span, ega_xor_fill,
     ega_save_size, ega_save, ega_restore, ega_dump,
-    ega_put_row, ega_move_down, ega_xor_span, ega_peek, ega_blank, ega_palette
+    ega_put_row, ega_move_down, ega_xor_span, ega_peek, ega_blank, ega_palette,
+    ega_text, ega_copy_rows, 1
 };

@@ -70,6 +70,13 @@ int edit_row_text(int row, char *out);
 /* The selected view columns of a view row, [*c0, *c1); a selected line break is one column
  * past the text. Zero if none of the row is selected. */
 int edit_row_selection(int row, int *c0, int *c1);
+/* The same, for the line starting at p: drawing walks the view's lines from
+ * edit_view_start() with edit_next_line() (which gives -1, as unsigned, past the last),
+ * rather than counting each row's line from the top. */
+unsigned edit_view_start(void);
+unsigned edit_next_line(unsigned p);
+int edit_line_text(unsigned p, char *out);
+int edit_line_selection(unsigned p, int *c0, int *c1);
 /* The caret's view row and column; zero if it's out of view. */
 int edit_caret(int *row, int *col);
 

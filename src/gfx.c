@@ -167,12 +167,16 @@ void gfx_mask(int x, int y, const uint16_t *rows, int h, int n, uint8_t c)
         gfx_bits(x, y + r, rows[r], n, c);
 }
 
+/* Characters wholly inside the clip go to the driver a run at a time; one cut by the clip's
+ * edge (or dithered) goes a row at a time through gfx_bits, which clips. */
 void gfx_text(int x, int y, const char *s, uint8_t c, int dither)
 {
     const uint8_t __far *g;
     uint16_t bits;
     unsigned char ch;
-    int r;
+    char run[80];
+    int r, n = 0, run_x = 0;
+    int whole_rows = y >= clip.y && y + 8 <= clip.y + clip.h;
 
     if (y >= clip.y + clip.h || y + 8 <= clip.y)
         return;
@@ -184,6 +188,20 @@ void gfx_text(int x, int y, const char *s, uint8_t c, int dither)
         ch = (unsigned char)*s;
         if (ch > 127)
             ch = '?';
+        if (whole_rows && !dither && x >= clip.x && x + 8 <= clip.x + clip.w) {
+            if (n == 0)
+                run_x = x;
+            run[n++] = (char)ch;
+            if (n == (int)sizeof run) {
+                D->text(run_x, y, font, run, n, c);
+                n = 0;
+            }
+            continue;
+        }
+        if (n > 0) {
+            D->text(run_x, y, font, run, n, c);
+            n = 0;
+        }
         g = font + ch * 8;
         for (r = 0; r < 8; r++) {
             bits = (uint16_t)((uint16_t)g[r] << 8);
@@ -193,6 +211,22 @@ void gfx_text(int x, int y, const char *s, uint8_t c, int dither)
                 gfx_bits(x, y + r, bits, 8, c);
         }
     }
+    if (n > 0)
+        D->text(run_x, y, font, run, n, c);
+}
+
+int gfx_scroll(const Rect *r, int dy)
+{
+    if ((r->x & 7) || (r->w & 7) || r->x < 0 || r->y < 0 || r->x + r->w > SCREEN_W ||
+        r->y + r->h > SCREEN_H || r->w <= 0)
+        return 0;
+    if (dy == 0 || dy >= r->h || -dy >= r->h)
+        return 1; /* nothing that stays in r to move */
+    if (dy > 0)
+        D->copy_rows(r->x, r->y, r->w, r->h - dy, r->y + dy);
+    else
+        D->copy_rows(r->x, r->y - dy, r->w, r->h + dy, r->y);
+    return 1;
 }
 
 int gfx_text_w(const char *s)

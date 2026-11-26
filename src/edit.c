@@ -221,9 +221,26 @@ static unsigned row_start(int row)
     return p;
 }
 
+unsigned edit_view_start(void)
+{
+    return E.top;
+}
+
+unsigned edit_next_line(unsigned p)
+{
+    unsigned next = tb_next_line(&E.t, p);
+
+    return next == p ? (unsigned)-1 : next;
+}
+
 int edit_row_text(int row, char *out)
 {
-    unsigned p = row_start(row), end, n = 0;
+    return edit_line_text(row_start(row), out);
+}
+
+int edit_line_text(unsigned p, char *out)
+{
+    unsigned end, n = 0;
     char c;
 
     if (p == (unsigned)-1) {
@@ -241,12 +258,16 @@ int edit_row_text(int row, char *out)
 
 int edit_row_selection(int row, int *c0, int *c1)
 {
-    unsigned p, end, s, e, a, b;
+    return edit_line_selection(row_start(row), c0, c1);
+}
+
+int edit_line_selection(unsigned p, int *c0, int *c1)
+{
+    unsigned end, s, e, a, b;
     long from, to;
 
     if (!edit_selection(&s, &e))
         return 0;
-    p = row_start(row);
     if (p == (unsigned)-1)
         return 0;
     end = tb_line_end(&E.t, p);

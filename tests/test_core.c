@@ -57,6 +57,35 @@ static void test_union_contains(void)
     CHECK(!rect_contains(&a, 9, 15));
 }
 
+/* rect_subtract's pieces cover a but not b, each point once. */
+static int covers_rest(const Rect *a, const Rect *b)
+{
+    Rect out[4];
+    int n = rect_subtract(a, b, out), x, y, k, hits;
+
+    for (y = a->y - 2; y < a->y + a->h + 2; y++)
+        for (x = a->x - 2; x < a->x + a->w + 2; x++) {
+            for (hits = 0, k = 0; k < n; k++)
+                hits += rect_contains(&out[k], x, y);
+            if (hits != (rect_contains(a, x, y) && !rect_contains(b, x, y)))
+                return 0;
+        }
+    return 1;
+}
+
+static void test_subtract(void)
+{
+    Rect a = rect_make(10, 10, 20, 10), out[4];
+    Rect inside = rect_make(15, 12, 4, 3), apart = rect_make(50, 50, 5, 5), all = rect_make(0, 0, 99, 99);
+    Rect left = rect_make(0, 0, 15, 99), corner = rect_make(25, 15, 20, 20);
+
+    CHECK(rect_subtract(&a, &inside, out) == 4 && covers_rest(&a, &inside));
+    CHECK(rect_subtract(&a, &apart, out) == 1 && same(out[0], 10, 10, 20, 10));
+    CHECK(rect_subtract(&a, &all, out) == 0);
+    CHECK(rect_subtract(&a, &left, out) == 1 && same(out[0], 15, 10, 15, 10));
+    CHECK(rect_subtract(&a, &corner, out) == 2 && covers_rest(&a, &corner));
+}
+
 static void test_resize(void)
 {
     Rect r = rect_make(176, 41, 336, 122), out;
@@ -523,6 +552,7 @@ int main(void)
     test_thousands();
     test_dates();
     test_resize();
+    test_subtract();
     test_snap();
     test_gm_split_apply();
     test_gm_paths();

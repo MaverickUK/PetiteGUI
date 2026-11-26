@@ -4,6 +4,7 @@
 #define MOUSE_H
 
 #include <stdint.h>
+#include "rect.h"
 
 /* Reset the driver for the current video mode and set the pointer. Zero if there's no driver. */
 int mouse_init(void);
@@ -12,6 +13,9 @@ int mouse_present(void);
 void mouse_shutdown(void);
 void mouse_show(void);
 void mouse_hide(void);
+/* Hide it only if it's over area, or goes there, until the matching mouse_show: what's drawn
+ * elsewhere leaves it alone. (On the EGA it's hidden everywhere, as mouse_hide.) */
+void mouse_hide_in(const Rect *area);
 /* buttons: bit 0 left, bit 1 right. */
 void mouse_read(int *x, int *y, int *buttons);
 

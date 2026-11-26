@@ -5,6 +5,7 @@
 #include <conio.h>
 #include <i86.h>
 #include <string.h>
+#include "drawasm.h"
 #include "gfx.h"
 
 #define ROW(y) ((uint8_t __far *)MK_FP(0xB800, (((y) & 1) ? 0x2000 : 0) + ((unsigned)(y) >> 1) * 80))
@@ -225,9 +226,35 @@ static void cga_palette(const uint8_t *map)
     }
 }
 
+/* A row of glyphs at a time (drawasm.asm): each character is one byte across, or two when x
+ * isn't on a byte (its bits shifted across the pair). Ink sets bits, paper clears them. */
+static void cga_text(int x, int y, const uint8_t __far *font, const char *s, int n, uint8_t c)
+{
+    int r, yy;
+
+    for (r = 0; r < 8; r++) {
+        yy = y + r;
+        text_row_cga(((yy & 1) ? 0x2000u : 0u) + (unsigned)(yy >> 1) * 80u + (unsigned)(x >> 3), s, n,
+                     FP_OFF(font) + r, FP_SEG(font), x & 7, c != 0);
+    }
+}
+
+static void cga_copy_rows(int x, int y, int w, int h, int to_y)
+{
+    int r, nb = w >> 3;
+
+    if (to_y > y) /* down: from the bottom, so nothing is overwritten before it moves */
+        for (r = h - 1; r >= 0; r--)
+            _fmemcpy(ROW(to_y + r) + (x >> 3), ROW(y + r) + (x >> 3), nb);
+    else
+        for (r = 0; r < h; r++)
+            _fmemcpy(ROW(to_y + r) + (x >> 3), ROW(y + r) + (x >> 3), nb);
+}
+
 const Driver drv_cga = {
     "Paper (CGA)",
     cga_init, cga_fill, cga_pattern, cga_span, cga_xor_fill,
     cga_save_size, cga_save, cga_restore, cga_dump,
-    cga_put_row, cga_move_down, cga_xor_span, cga_peek, cga_blank, cga_palette
+    cga_put_row, cga_move_down, cga_xor_span, cga_peek, cga_blank, cga_palette,
+    cga_text, cga_copy_rows, 0
 };

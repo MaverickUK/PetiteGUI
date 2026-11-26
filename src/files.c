@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "files.h"
+#include "util.h"
 
 static int sort_by;
 
@@ -62,6 +63,18 @@ void files_load(Win *w, int by)
         r->date = f.wr_date;
         r->time = f.wr_time;
         r->picked = 0;
+    }
+    w->name_w = w->size_w = 0;
+    for (r = w->rows; r < w->rows + w->nrows; r++) {
+        char size[16];
+
+        if ((int)strlen(r->name) * 8 > w->name_w)
+            w->name_w = (int)strlen(r->name) * 8;
+        if (!r->dir) {
+            fmt_thousands(r->size, size);
+            if ((int)strlen(size) * 8 > w->size_w)
+                w->size_w = (int)strlen(size) * 8;
+        }
     }
     if (!w->not_ready && _dos_getdiskfree((unsigned)((w->path[0] & ~0x20) - 'A' + 1), &df) == 0)
         w->free_kb = (long)df.avail_clusters * df.sectors_per_cluster * df.bytes_per_sector / 1024L;

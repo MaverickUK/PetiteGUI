@@ -31,7 +31,8 @@ CFLAGS = -bt=dos -mm -0 -ox -w4 -zq
 SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c keyboard.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c saverlib.c saver.c savers_fx.c savers_grid.c savers_info.c gamecols.c field.c drives.c fileops.c
 # swapcore must come first: it has to be the first code in memory, so that everything after
 # it can be swapped out while a game runs (see src/swapcore.asm).
-OBJ = build/swapcore.obj $(patsubst %.c,build/%.obj,$(SRC))
+# drawasm (the text loop in assembly) comes after the C: anywhere but first is fine.
+OBJ = build/swapcore.obj $(patsubst %.c,build/%.obj,$(SRC)) build/drawasm.obj
 HDR = $(wildcard src/*.h)
 NASM ?= nasm
 
@@ -39,6 +40,9 @@ build/PETITE.EXE: $(OBJ)
 	$(OWBIN)/wlink option quiet option stack=8192 option map=build/PETITE.MAP system dos name $@ file { $(OBJ) }
 
 build/swapcore.obj: src/swapcore.asm | build
+	$(NASM) -f obj -o $@ $<
+
+build/drawasm.obj: src/drawasm.asm | build
 	$(NASM) -f obj -o $@ $<
 
 build/%.obj: src/%.c $(HDR) | build

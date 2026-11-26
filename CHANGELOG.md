@@ -2,6 +2,38 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.11.0] - 2026-11-26
+
+Smoother, faster drawing: the roadmap's item 14. At PC/XT speed (`tools/bench.sh`, DOSBox-X at 300 cycles), before and after:
+
+| Each | Paper before | after | Ink before | after |
+|---|--:|--:|--:|--:|
+| The whole screen | 1400 ms | 765 ms (1.8x) | 2140 ms | 1260 ms (1.7x) |
+| A folder window | 1125 ms | 602 ms (1.9x) | 1495 ms | 617 ms (2.4x) |
+| The File menu, open and shut | 1372 ms | 920 ms (1.5x) | 1687 ms | 837 ms (2.0x) |
+| A line of 62 characters | 184 ms | 41 ms (4.5x) | 228 ms | 43 ms (5.3x) |
+| A folder scrolled a line | 1620 ms | 215 ms (7.5x) | 2091 ms | 365 ms (5.7x) |
+| The next row selected | 850 ms | 215 ms (4.0x) | 993 ms | 242 ms (4.1x) |
+| The editor scrolled a line | 5920 ms | 288 ms (20.6x) | 7426 ms | 668 ms (11.1x) |
+| A character typed | 384 ms | 155 ms (2.5x) | 439 ms | 155 ms (2.8x) |
+| The caret down a line | 896 ms | 279 ms (3.2x) | 988 ms | 265 ms (3.7x) |
+
+### Changed
+
+- **Scrolling moves what's already on the screen**: a list or the editor scrolling by less than a window copies the rows up or down in video memory (on the EGA, all four planes at once through the latches) and draws only the rows that come into view.
+- **A window coming to the front** redraws only what covered it and the two title bars and scroll bars that change; opening one draws it once, and closing one draws what it covered, rather than the window in front again.
+- **Typing in the editor** redraws from the caret to the end of the line; moving the caret, only the two characters it left and reached.
+- **A redraw works out only the parts of a window it touches**: rows outside it aren't formatted, and the title, info line and scroll bar aren't, unless it touches them. Every pixel of a window is filled once, not under the title bar and scroll bar too.
+- **The editor walks its view's lines once** to draw them, rather than counting each row's line from the top: scrolling it is about 20 times faster on an XT in Paper, 11 in Ink.
+- **Folder windows find their widest name and size once**, when the folder is read, rather than formatting every size at every redraw.
+- **Text** goes to the driver a run of characters at a time, the card set up once per run, and its inner loop is in assembly (`src/drawasm.asm`); the EGA driver writes each register with one 16-bit `OUT`.
+- **In Paper, the pointer is hidden only over what's being drawn** (INT 33h function 10h), so it doesn't blink while things change elsewhere. In Ink it's still hidden everywhere: the mouse driver would draw it in the middle of the EGA's register settings.
+
+### Added
+
+- `PETITE /BENCH` and `tools/bench.sh`: the drawing timed at PC/XT speed, in both looks.
+- `/SHOT=21` and `/SHOT=22` draw windows, a folder list and the editor a piece at a time, and `tools/dostest.sh` checks the screen comes out the same as drawn whole; `/SHOT=23` checks where the pointer is hidden. Host tests for `rect_subtract`.
+
 ## [0.10.0] - 2026-11-26
 
 The details: the fourth step of the [roadmap](ROADMAP.md).
@@ -186,6 +218,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.11.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.11.0
 [0.10.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.10.0
 [0.9.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.9.0
 [0.8.1]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.1

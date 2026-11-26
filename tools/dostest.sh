@@ -35,6 +35,9 @@ for f in A B C SUB/D; do echo "$f" > "$work/MULTI/$f.TXT"; done
 touch -d 2003-03-03 "$work/MULTI/A.TXT"
 touch -d 2001-01-01 "$work/MULTI/B.TXT"
 touch -d 2002-02-02 "$work/MULTI/C.TXT"
+mkdir -p "$work/MANY" # to scroll through: 60 files, and 200 lines
+for i in $(seq 10 69); do echo "$i" > "$work/MANY/FILE$i.TXT"; done
+for i in $(seq 1 200); do printf 'Line %d of a long file, to scroll through.\r\n' "$i"; done > "$work/LONG.TXT"
 mkdir -p "$work/SET"
 cp build/PETITE.EXE "$work/SET/"
 printf '; my settings\nscanpath:C:\\GAMES\nSaver: clock\n; the end\n' > "$work/SET/PETITE.CFG"
@@ -77,6 +80,20 @@ PETITE /DRIVES > C:\\OUT\\DRIVES.TXT
 PETITE /EGA /SHOT=13 /DUMP=C:\\OUT\\FILEOPS.BIN > C:\\OUT\\FILEOPSO.TXT
 PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
 PETITE /CGA /SHOT=16 /DUMP=C:\\OUT\\EDITOPS.BIN > C:\\OUT\\EDITOPSO.TXT
+PETITE /CGA /SHOT=21 /DUMP=C:\\OUT\\WHOLEC21.BIN > NUL
+copy C:\\OUT\\INCR.BIN C:\\OUT\\INCRC21.BIN > NUL
+PETITE /EGA /SHOT=21 /DUMP=C:\\OUT\\WHOLEE21.BIN > NUL
+copy C:\\OUT\\INCR.BIN C:\\OUT\\INCRE21.BIN > NUL
+PETITE /CGA /SHOT=22 /DUMP=C:\\OUT\\WHOLEC22.BIN > NUL
+copy C:\\OUT\\INCR.BIN C:\\OUT\\INCRC22.BIN > NUL
+PETITE /EGA /SHOT=22 /DUMP=C:\\OUT\\WHOLEE22.BIN > NUL
+copy C:\\OUT\\INCR.BIN C:\\OUT\\INCRE22.BIN > NUL
+md C:\\OUT\\PTRC
+md C:\\OUT\\PTRE
+PETITE /CGA /SHOT=23 /DUMP=C:\\OUT\\PTRNONE.BIN > NUL
+copy C:\\OUT\\PTR*.BIN C:\\OUT\\PTRC > NUL
+PETITE /EGA /SHOT=23 /DUMP=C:\\OUT\\PTRNONE.BIN > NUL
+copy C:\\OUT\\PTR*.BIN C:\\OUT\\PTRE > NUL
 PETITE /EGA /SHOT=19 /DUMP=C:\\OUT\\MULTI.BIN > C:\\OUT\\MULTIO.TXT
 PETITE /CGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\CCYCLE.BIN
 PETITE /EGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\ECYCLE.BIN
@@ -180,6 +197,29 @@ check(multi[2] == "1 0 1 1", "the three copied to D: together, and not the fourt
 check(multi[3] == "1", "Info made a file read-only (R, then Enter)")
 check(multi[4] == "0 0", "and, read-only, it was still deleted when asked to be: %r" % multi[4])
 check(multi[5] == "3 0", "Select all, then Delete, emptied D: %r" % multi[5])
+def dump(*p):
+    p = os.path.join(w, *p)
+    return open(p, "rb").read() if os.path.exists(p) else None
+for look in ("C", "E"):
+    shown, away, over, none = (dump("OUT", "PTR" + look, "PTR%s.BIN" % k) for k in ("SHOWN", "AWAY", "OVER", "NONE"))
+    check(None not in (shown, none) and shown != none, "%s: the pointer shows (the mouse driver drew it)" % ("Paper", "Ink")[look == "E"])
+    if look == "C":
+        check(away is not None and away == shown, "Paper: drawing elsewhere leaves the pointer showing (INT 33h function 10h)")
+    else:
+        check(away is not None and away == none, "Ink: drawing anywhere hides the pointer (the EGA's registers are in use)")
+    check(over is not None and over == none, "%s: drawing over the pointer hides it" % ("Paper", "Ink")[look == "E"])
+for scene, what in (("21", "windows opened, raised and closed, a folder scrolled and selected in"),
+                    ("22", "the editor scrolled, typed in and selected in")):
+    for look, name in (("C", "Paper"), ("E", "Ink")):
+        a = os.path.join(w, "OUT", "INCR%s%s.BIN" % (look, scene))
+        b = os.path.join(w, "OUT", "WHOLE%s%s.BIN" % (look, scene))
+        same_screen = os.path.exists(a) and os.path.exists(b) and open(a, "rb").read() == open(b, "rb").read()
+        if not same_screen and os.path.exists(a) and os.path.exists(b):
+            os.makedirs("build/shots", exist_ok=True)
+            for src, out in ((a, "incr"), (b, "whole")):
+                subprocess.call([sys.executable, "tools/dump2png.py", src, "build/shots/%s%s-%s.png" % (out, scene, look)])
+            print("     build/shots/incr%s-%s.png and whole%s-%s.png show the difference" % (scene, look, scene, look))
+        check(same_screen, "%s: %s, drawn a piece at a time, match the screen drawn whole" % (name, what))
 for k in ["cycle", "blank", "stars", "lines", "maze", "melt", "life", "games", "clock"]:
     for look, size in (("C", 16384), ("E", 64000)):
         p = os.path.join(w, "OUT", look + k.upper()[:7] + ".BIN")

@@ -435,7 +435,7 @@ static void draw_scrollbar(const Win *w, const WinParts *p, int active)
         gfx_fill(p->scroll.x + 1, p->scroll.y, SCROLL_W - 1, p->scroll.h, T->win_bg);
         return;
     }
-    gfx_pattern(p->scroll.x + 1, p->scroll.y, SCROLL_W - 1, p->scroll.h, PAT_CHECKER, T->track_on, T->track_off);
+    /* Each pixel once: the arrow boxes, the size box, and the track around the thumb. */
     gfx_fill(p->up.x, p->up.y, p->up.w, p->up.h, T->win_bg);
     hline(p->scroll.x, p->up.y + ARROW_H, SCROLL_W, T->frame);
     triangle(p->scroll.x + 8, p->up.y + 2, 3, 1, T->frame);
@@ -448,10 +448,15 @@ static void draw_scrollbar(const Win *w, const WinParts *p, int active)
     gfx_frame(p->grow.x + 4, p->grow.y + 2, 10, 5, T->frame);
     gfx_fill(p->grow.x + 4, p->grow.y + 2, 6, 3, T->win_bg);
     gfx_frame(p->grow.x + 4, p->grow.y + 2, 6, 3, T->frame);
-    if (w->nrows <= p->visible)
-        return; /* nothing to scroll: no thumb */
+    if (w->nrows <= p->visible) { /* nothing to scroll: no thumb */
+        gfx_pattern(p->track.x, p->track.y, p->track.w, p->track.h, PAT_CHECKER, T->track_on, T->track_off);
+        return;
+    }
     th = imax(6, (int)((long)p->track.h * p->visible / w->nrows));
     ty = p->track.y + (int)((long)(p->track.h - th) * w->top / (w->nrows - p->visible));
+    gfx_pattern(p->track.x, p->track.y, p->track.w, ty - 1 - p->track.y, PAT_CHECKER, T->track_on, T->track_off);
+    gfx_pattern(p->track.x, ty + th + 1, p->track.w, p->track.y + p->track.h - (ty + th + 1), PAT_CHECKER,
+                T->track_on, T->track_off);
     gfx_fill(p->track.x, ty, p->track.w, th, T->thumb);
     gfx_frame(p->scroll.x, ty - 1, SCROLL_W, th + 2, T->frame);
 }
@@ -543,6 +548,15 @@ static void row_text(const Win *w, int k, char *name, char *right, int *kind)
     *kind = w->rows[k].dir ? ROW_DIR : ROW_FILE;
 }
 
+/* Does r touch the clip rectangle? A redraw is often a row or a character: the parts of a
+ * window it doesn't touch aren't worked out at all (their text formatted, their sums done). */
+static int touches(int x, int y, int w, int h)
+{
+    Rect r = rect_make(x, y, w, h), clip = gfx_get_clip();
+
+    return rect_intersect(&r, &r, &clip);
+}
+
 /* Characters from..to-1 of a row's text (n long), at their columns. */
 static void text_span(int x0, int y, const char *text, int n, int from, int to, uint8_t c)
 {
@@ -562,38 +576,41 @@ static void draw_editor(const Win *w, const WinParts *p, int active)
 {
     char buf[40], text[100];
     int row, col, cr, cc, ry, x0 = p->list.x + 4;
-    unsigned len = tb_len(&E.t), sel_start, sel_end;
+    unsigned len = tb_len(&E.t), sel_start, sel_end, line;
     Rect old_clip, list;
     Win view = *w;
 
-    sprintf(buf, "Line %u, Col %u", E.cur_line + 1, tb_col(&E.t, E.cur) + 1);
-    gfx_text(p->info.x + 8, p->info.y + 1, buf, T->text, 0);
-    if (E.modified)
-        strcpy(buf, "Not saved");
-    else
-        fmt_thousands((long)len, buf), strcat(buf, " characters");
-    gfx_text(p->info.x + p->info.w - 8 - gfx_text_w(buf), p->info.y + 1, buf, T->text, 0);
-    hline(p->info.x, p->info.y + ROW_H + 1, p->info.w, T->frame);
-
-    view.nrows = (int)E.lines; /* the scroll bar follows the view */
-    view.top = (int)E.top_line;
-    draw_scrollbar(&view, p, active);
+    if (touches(p->info.x, p->info.y, p->info.w, ROW_H + 2)) {
+        sprintf(buf, "Line %u, Col %u", E.cur_line + 1, tb_col(&E.t, E.cur) + 1);
+        gfx_text(p->info.x + 8, p->info.y + 1, buf, T->text, 0);
+        if (E.modified)
+            strcpy(buf, "Not saved");
+        else
+            fmt_thousands((long)len, buf), strcat(buf, " characters");
+        gfx_text(p->info.x + p->info.w - 8 - gfx_text_w(buf), p->info.y + 1, buf, T->text, 0);
+        hline(p->info.x, p->info.y + ROW_H + 1, p->info.w, T->frame);
+    }
+    if (touches(p->scroll.x, p->scroll.y, p->scroll.w, p->scroll.h)) {
+        view.nrows = (int)E.lines; /* the scroll bar follows the view */
+        view.top = (int)E.top_line;
+        draw_scrollbar(&view, p, active);
+    }
 
     old_clip = gfx_get_clip();
     rect_intersect(&list, &p->list, &old_clip);
     if (rect_empty(&list))
         return;
     gfx_set_clip(&list);
-    for (row = 0; row < E.rows; row++) {
+    for (row = 0, line = edit_view_start(); row < E.rows && line != (unsigned)-1; row++, line = edit_next_line(line)) {
         int c0, c1, n;
 
         ry = p->list.y + 2 + row * ROW_H;
-        if (ry >= list.y + list.h || ry + ROW_H <= list.y)
-            continue;
-        n = edit_row_text(row, text);
-        if (n < 0)
-            break;
-        if (!edit_row_selection(row, &c0, &c1)) {
+        if (ry - 1 >= list.y + list.h)
+            break; /* below the clip: no more */
+        if (ry - 1 + ROW_H <= list.y)
+            continue; /* above it: only the line's start is needed, for the next */
+        n = edit_line_text(line, text);
+        if (!edit_line_selection(line, &c0, &c1)) {
             gfx_text(x0, ry, text, T->text, 0);
             continue;
         }
@@ -605,7 +622,8 @@ static void draw_editor(const Win *w, const WinParts *p, int active)
     }
     if (edit_selection(&sel_start, &sel_end)) /* a selection shows instead of the caret */
         active = 0;
-    if (edit_caret(&cr, &cc) && active) { /* the character under the caret, inverted */
+    if (edit_caret(&cr, &cc) && active && touches(x0 + cc * 8, p->list.y + 1 + cr * ROW_H, 8, ROW_H)) {
+        /* the character under the caret, inverted */
         ry = p->list.y + 2 + cr * ROW_H;
         edit_row_text(cr, text);
         col = cc;
@@ -637,10 +655,12 @@ static void draw_game_rows(const Win *w, const WinParts *p)
     for (k = w->top; k < w->nrows && k - w->top <= p->visible; k++) {
         int sel = k == w->sel;
 
-        games_get(k, &g);
         ry = p->list.y + 2 + (k - w->top) * ROW_H;
-        if (ry > list.y + list.h || ry + ROW_H < list.y)
+        if (ry - 1 >= list.y + list.h)
+            break;
+        if (ry - 1 + ROW_H <= list.y)
             continue;
+        games_get(k, &g);
         if (sel)
             gfx_fill(p->list.x, ry - 1, p->list.w, ROW_H, T->sel);
         col = sel ? T->sel_text : T->text;
@@ -669,8 +689,8 @@ void draw_window(int i)
     const Win *w = &A.win[i];
     WinParts p;
     int active = i == front_window(), x = w->r.x, y = w->r.y;
-    int r, k, tx, tw, ry, nx, name_w = 0;
-    int right_w = 0, right_x, show_right, max_chars, date_x, show_date;
+    int r, k, tx, tw, ry, nx, name_w;
+    int right_w, right_x, show_right, max_chars, date_x, show_date;
     uint8_t tc, c;
     char buf[24], right[24], name[40], title[72];
     const char *info_right;
@@ -678,10 +698,15 @@ void draw_window(int i)
 
     window_parts(i, &p);
     shadow(x, y, w->r.w, w->r.h);
-    gfx_fill(x, y, w->r.w, w->r.h, T->win_bg);
+    /* The background, under the title bar and left of the scroll bar only: those two fill
+     * themselves, and filling them twice shows as a flicker. */
+    gfx_fill(p.info.x, p.info.y, p.info.w, p.list.y - p.info.y, T->win_bg);
+    gfx_fill(p.list.x, p.list.y, p.list.w, p.list.h, T->win_bg);
     gfx_frame(x, y, w->r.w, w->r.h, T->frame);
 
     /* Title bar */
+    if (!touches(p.title.x, p.title.y, p.title.w, TITLE_H + 1))
+        goto below_title;
     if (T->stripes) {
         gfx_fill(p.title.x, p.title.y, p.title.w, TITLE_H, T->win_bg);
         if (active)
@@ -714,13 +739,16 @@ void draw_window(int i)
         gfx_frame(p.close.x, p.close.y, p.close.w, p.close.h, tc);
     }
 
+below_title:
     if (w->kind == WIN_EDIT) {
         draw_editor(w, &p, active);
         return;
     }
 
     /* Info line */
-    if (w->kind == WIN_GAMES) {
+    if (!touches(p.info.x, p.info.y, p.info.w, ROW_H + 2))
+        ;
+    else if (w->kind == WIN_GAMES) {
         sprintf(buf, "%d game%s", w->nrows, w->nrows == 1 ? "" : "s");
         info_right = S.scan_path;
     } else if (w->not_ready) {
@@ -732,12 +760,14 @@ void draw_window(int i)
         strcat(right, " KB free");
         info_right = right;
     }
-    gfx_text(p.info.x + 8, p.info.y + 1, buf, T->text, 0);
-    if (gfx_text_w(info_right) + 16 + 9 * 8 < p.info.w)
-        gfx_text(p.info.x + p.info.w - 8 - gfx_text_w(info_right), p.info.y + 1, info_right, T->text, 0);
-    hline(p.info.x, p.info.y + ROW_H + 1, p.info.w, T->frame);
-
-    draw_scrollbar(w, &p, active);
+    if (touches(p.info.x, p.info.y, p.info.w, ROW_H + 2)) {
+        gfx_text(p.info.x + 8, p.info.y + 1, buf, T->text, 0);
+        if (gfx_text_w(info_right) + 16 + 9 * 8 < p.info.w)
+            gfx_text(p.info.x + p.info.w - 8 - gfx_text_w(info_right), p.info.y + 1, info_right, T->text, 0);
+        hline(p.info.x, p.info.y + ROW_H + 1, p.info.w, T->frame);
+    }
+    if (touches(p.scroll.x, p.scroll.y, p.scroll.w, p.scroll.h))
+        draw_scrollbar(w, &p, active);
 
     if (w->kind == WIN_GAMES) {
         draw_headings(&p);
@@ -747,14 +777,8 @@ void draw_window(int i)
 
     /* Rows, clipped to the list. The sizes show if they fit beside the widest name, and the
      * dates at the right if they fit too; names too long for the space are cut short. */
-    {
-        for (k = 0; k < w->nrows; k++) {
-            name_w = imax(name_w, gfx_text_w(w->rows[k].name));
-            fmt_thousands(w->rows[k].size, buf);
-            if (!w->rows[k].dir)
-                right_w = imax(right_w, gfx_text_w(buf));
-        }
-    }
+    name_w = w->name_w; /* worked out when the folder was read (files_load) */
+    right_w = w->size_w;
     nx = p.list.x + 8 + 16 + 8;
     date_x = p.list.x + p.list.w - 8 - DATE_W;
     show_date = nx + name_w + 16 + right_w + 16 + DATE_W <= p.list.x + p.list.w - 8;
@@ -770,10 +794,14 @@ void draw_window(int i)
             int sel = ROW_SELECTED(w, k), kind, hidden = (w->rows[k].attrib & 0x02) != 0; /* _A_HIDDEN */
             const uint16_t *line_mask, *fill_mask;
 
+            ry = p.list.y + 2 + (k - w->top) * ROW_H;
+            if (ry - 1 >= list.y + list.h)
+                break; /* rows outside the clip aren't formatted at all */
+            if (ry - 1 + ROW_H <= list.y)
+                continue;
             row_text(w, k, name, right, &kind);
             if ((int)strlen(name) > max_chars && max_chars > 0)
                 name[max_chars] = '\0';
-            ry = p.list.y + 2 + (k - w->top) * ROW_H;
             if (sel)
                 gfx_fill(p.list.x, ry - 1, p.list.w, ROW_H, T->sel);
             c = sel ? T->sel_text : T->text;

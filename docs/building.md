@@ -22,6 +22,7 @@ make dostest        # end-to-end tests in DOSBox-X: scanning, swapping, running 
 tools/run.sh        # try it: Paper on an emulated CGA at about PC/XT speed
 tools/run.sh ink    # Ink on an emulated EGA
 CYCLES=max tools/run.sh   # flat out
+tools/bench.sh      # time the drawing at PC/XT speed, both looks (PETITE /BENCH)
 ```
 
 ## End-to-end tests
@@ -35,6 +36,7 @@ CYCLES=max tools/run.sh   # flat out
 - after a game run from the Games window, the desktop is back;
 - the editor saves a typed line into a CR LF file, keeping CR LF, and leaves no temporary file;
 - a new file, typed in, copied and pasted, found in, cut from and pasted to, is saved as `NEW.TXT` with CR LF; `CONFIG.SYS` opens in the editor from a folder;
+- scenes 21 and 22 (windows opened, raised and closed, a folder list and the editor scrolled, selected and typed in, all drawn a piece at a time) leave the screen exactly as drawing it whole does, in both looks; scene 23 shows the pointer left alone by drawing elsewhere in Paper (INT 33h function 10h), and hidden by any drawing in Ink;
 - a folder sorted by date comes newest first; a Shift-click and Ctrl-clicks select three items, which copy to D: together; Info, with R and Enter put in the keyboard buffer, makes a file read-only, and a confirmed delete still removes it; Select all and Delete empty D:;
 - every screensaver runs 60 steps in Paper and in Ink and returns, having drawn (Blank: having left the screen black);
 - `/SET` changes one setting and adds another, keeping the rest of `PETITE.CFG`;
@@ -47,7 +49,7 @@ CYCLES=max tools/run.sh   # flat out
 
 ## Screenshots
 
-`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu, 8 a window resized and another zoomed, 9 the About box, 12 the Run… box, 14 deleting a folder, 15 a selection in the editor with the Edit menu open, 17 several files selected, with their dates, 18 the Info box, 20 the System menu; 4, 7, 10, 11, 13, 16 and 19 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
+`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu, 8 a window resized and another zoomed, 9 the About box, 12 the Run… box, 14 deleting a folder, 15 a selection in the editor with the Edit menu open, 17 several files selected, with their dates, 18 the Info box, 20 the System menu; 4, 7, 10, 11, 13, 16, 19, 21, 22 and 23 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
 
 ## CI
 

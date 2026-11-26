@@ -56,6 +56,7 @@ typedef struct Win {
     uint8_t truncated; /* more files than cap */
     uint8_t not_ready; /* the drive couldn't be read */
     long free_kb;
+    int name_w, size_w; /* the widest name and size, in pixels: worked out once, when read */
 } Win;
 
 /* Is row k selected? The focus row always is; in a folder window, so is any picked one. */

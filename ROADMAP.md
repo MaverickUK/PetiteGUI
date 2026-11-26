@@ -33,13 +33,13 @@ Each step is a minor version. The numbers are the items' order in the original l
 
 0.8.1 began this: menus and lists redraw only the items that change, and a redraw inside one window starts from that window. The rest, roughly in the order that does most for the flicker people see and the speed of a real 8088 or 286:
 
-- [ ] **14. Draw less, and draw it faster.**
-  - **Scroll by moving pixels:** a list or the editor scrolling a line copies what's already on the screen up or down (a byte copy per row on the CGA, the latches on the EGA) and draws only the new line, rather than redrawing the window.
-  - **The pointer only where it's needed:** hide it (INT 33h function 10h) only over the rectangle being drawn, rather than everywhere, so it stops blinking while things change elsewhere.
-  - **Typing in the editor:** redraw from the caret to the end of its line, not the whole line.
-  - **Opening and closing windows:** draw a window once, in its final place, with nothing drawn and then covered.
-  - **The inner loops in assembly:** fills, text and spans in NASM, after timing them on a slow machine (or DOSBox at XT speed) to find what's worth it.
-  - **Waiting for the retrace** before larger redraws, if tearing shows on real hardware.
+- [x] **14. Draw less, and draw it faster** (done in 0.11.0, but the last).
+  - [x] **Scroll by moving pixels:** a list or the editor scrolling a line copies what's already on the screen up or down (a byte copy per row on the CGA, the latches on the EGA) and draws only the new line, rather than redrawing the window.
+  - [x] **The pointer only where it's needed:** hide it (INT 33h function 10h) only over the rectangle being drawn, rather than everywhere, so it stops blinking while things change elsewhere. In Paper only: on the EGA the mouse driver would draw the pointer in the middle of PetiteGUI's register settings.
+  - [x] **Typing in the editor:** redraw from the caret to the end of its line, not the whole line.
+  - [x] **Opening and closing windows:** draw a window once, in its final place, with nothing drawn and then covered.
+  - [x] **The inner loops in assembly:** fills, text and spans in NASM, after timing them on a slow machine (or DOSBox at XT speed) to find what's worth it. `tools/bench.sh` timed it: the big costs were in C (each row of the editor counted from the top, every size formatted for every redraw), so those were fixed there; text went into NASM, the one inner loop that still showed. Fills were already `rep stosb`.
+  - [ ] **Waiting for the retrace** before larger redraws, if tearing shows on real hardware. Not done: it needs a real PC to see whether it's wanted.
 
 ## Later, if they earn their place
 

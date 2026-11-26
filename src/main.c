@@ -18,9 +18,12 @@
  *                     13 file operations, 14 deleting a folder, 15 a selection and the Edit
  *                     menu, 16 the clipboard, Find and Save as, 17 several files selected,
  *                     18 the Info box, 19 sorting by date, several selected, Info and
- *                     deleting, 20 the System menu), write video memory to FILE.BIN and quit: tools/shot.sh
+ *                     deleting, 20 the System menu, 21 and 22 drawing a piece at a time
+ *                     against drawing it all, 23 hiding the pointer), write video memory to FILE.BIN and quit: tools/shot.sh
  *                     makes a PNG
  *   PETITE /DRIVES    list the drives found, and quit
+ *   PETITE /BENCH /DUMP=FILE.TXT
+ *                     time the drawing, in BIOS ticks, into FILE.TXT (tools/bench.sh)
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
  * changes redraws only the rectangle it changed, back to front. */
@@ -448,16 +451,54 @@ static const Rect FULL = { 0, 0, SCREEN_W, SCREEN_H };
 
 static void redraw(const Rect *area)
 {
-    mouse_hide();
+    mouse_hide_in(area);
     draw_desktop(area);
     mouse_show();
 }
 
+/* A window: its own rectangle first (which, in front, starts from it: nothing behind it is
+ * drawn only to be covered), then the strips of shadow at its right and bottom. */
 static void redraw_window(int i)
 {
-    Rect r = window_bounds(i);
+    Rect r = A.win[i].r, s;
 
     redraw(&r);
+    s = rect_make(r.x + r.w, r.y, SHADOW_X, r.h + SHADOW_Y);
+    redraw(&s);
+    s = rect_make(r.x, r.y + r.h, r.w, SHADOW_Y);
+    redraw(&s);
+}
+
+/* The parts of window i that look different in front: the title bar, the scroll bar and
+ * the editor's caret. */
+static int active_parts(int i, Rect *out)
+{
+    WinParts p;
+    int n = 0, row, col;
+
+    window_parts(i, &p);
+    out[n++] = p.title;
+    out[n++] = p.scroll;
+    if (A.win[i].kind == WIN_EDIT && E.open && edit_caret(&row, &col))
+        out[n++] = rect_make(p.list.x + 4 + col * 8, p.list.y + 1 + row * ROW_H, 8, ROW_H);
+    return n;
+}
+
+/* Redraw window i's active parts, but not where except is (NULL: anywhere): a window going
+ * to the back or the front changes only those. */
+static void redraw_active_parts(int i, const Rect *except)
+{
+    Rect parts[3], pieces[4];
+    int n, k, m, j;
+
+    if (i < 0 || !A.win[i].open)
+        return;
+    n = active_parts(i, parts);
+    for (k = 0; k < n; k++) {
+        m = except != NULL ? rect_subtract(&parts[k], except, pieces) : (pieces[0] = parts[k], 1);
+        for (j = 0; j < m; j++)
+            redraw(&pieces[j]);
+    }
 }
 
 /* ---- Menus ---- */
@@ -503,7 +544,11 @@ static void set_hot(int hot)
     if (hot == old)
         return;
     A.hot = hot;
-    mouse_hide();
+    {
+        Rect r = menu_rect(A.open_menu);
+
+        mouse_hide_in(&r);
+    }
     if (old >= 0)
         draw_menu_item(A.open_menu, old);
     if (hot >= 0)
@@ -573,42 +618,68 @@ static void close_alert(int button)
 
 /* ---- Windows ---- */
 
-static void bring_to_front(int i)
+/* Move window i to the front of the z-order, drawing nothing. */
+static void raise_window(int i)
 {
-    int k, old = front_window();
+    int k;
 
-    if (old == i)
-        return;
     for (k = 0; A.z[k] != i; k++)
         ;
     for (; k < NUM_WINS - 1; k++)
         A.z[k] = A.z[k + 1];
     A.z[NUM_WINS - 1] = i;
-    if (old >= 0)
-        redraw_window(old); /* its title bar goes inactive */
-    redraw_window(i);
+}
+
+/* To the front: only what covered it is drawn again (now under it), and the title bars and
+ * scroll bars of it and of the window that was in front. */
+static void bring_to_front(int i)
+{
+    int k, j, old = front_window();
+    Rect r, bounds = window_bounds(i);
+
+    if (old == i)
+        return;
+    for (k = 0; A.z[k] != i; k++)
+        ;
+    raise_window(i);
+    for (j = k; j < NUM_WINS - 1; j++) { /* those that were above it */
+        int above = A.z[j];
+
+        if (!A.win[above].open)
+            continue;
+        r = window_bounds(above);
+        if (rect_intersect(&r, &r, &bounds))
+            redraw(&r);
+    }
+    redraw_active_parts(i, NULL);
+    redraw_active_parts(old, &bounds);
 }
 
 static void open_window(int i)
 {
-    if (!A.win[i].open) {
-        A.win[i].open = 1;
+    int old = front_window();
+    Rect bounds;
+
+    if (A.win[i].open) {
         bring_to_front(i);
-        redraw_window(i);
-    } else {
-        bring_to_front(i);
+        return;
     }
+    A.win[i].open = 1;
+    raise_window(i);
+    redraw_window(i);
+    bounds = window_bounds(i);
+    redraw_active_parts(old, &bounds); /* it isn't in front now */
 }
 
+/* What it covered is drawn (the window now in front already active there), then the rest of
+ * that window's title bar and scroll bar. */
 static void close_window(int i)
 {
-    int f;
+    Rect bounds = window_bounds(i);
 
     A.win[i].open = 0;
-    redraw_window(i);
-    f = front_window();
-    if (f >= 0)
-        redraw_window(f); /* now active */
+    redraw(&bounds);
+    redraw_active_parts(front_window(), &bounds);
 }
 
 /* A list row's rectangle in window i (clipped to the list when it's drawn) */
@@ -620,6 +691,8 @@ static Rect row_rect(int i, const WinParts *p, int k)
 /* How a click picks rows in a folder window: just it, from the anchor to it (Shift), or it
  * as well as the others, or not (Ctrl). */
 enum { PICK_ONE, PICK_RANGE, PICK_TOGGLE };
+
+static void show_scrolled(int i, int d);
 
 static int selected_count(int i)
 {
@@ -681,9 +754,16 @@ static void select_rows(int i, int k, int mode)
         w->top = k;
     if (k >= w->top + p.visible)
         w->top = k - p.visible + 1;
-    if (w->top != top || front_window() != i || w->kind == WIN_EDIT) {
+    if (front_window() != i || w->kind == WIN_EDIT) {
         redraw_window(i);
         return;
+    }
+    if (w->top != top) {
+        if (abs(w->top - top) >= p.visible) {
+            redraw_window(i);
+            return;
+        }
+        show_scrolled(i, w->top - top);
     }
     for (r = w->top; r < w->nrows && r - w->top <= p.visible; r++) {
         before = w->kind == WIN_FILES ? was[r] : r == old;
@@ -735,6 +815,48 @@ static int collect_batch(int i)
     return batch_n;
 }
 
+/* The list (or the editor's text) has scrolled by d rows, up if d is positive. If the
+ * window's in front and on the screen, the rows already drawn move by that many pixels (a
+ * copy in video memory) and only the rows that came into view, and the scroll bar, are
+ * drawn; else the window is. */
+static void show_scrolled(int i, int d)
+{
+    WinParts p;
+    Rect band, fresh;
+    const Rect *r = &A.win[i].r;
+    int y0, end;
+
+    window_parts(i, &p);
+    y0 = p.list.y + 1;
+    end = p.list.y + p.list.h;
+    /* Whole bytes across: from the left frame to the scroll bar's left line, both the same
+     * on every row, so they can move with the rows. */
+    band = rect_make(r->x, y0, r->w - SCROLL_W, end - y0);
+    if (d == 0)
+        return;
+    if (front_window() != i || abs(d) >= p.visible || A.open_menu >= 0 || A.alert_on) {
+        redraw_window(i);
+        return;
+    }
+    mouse_hide_in(&band);
+    if (!gfx_scroll(&band, -d * ROW_H)) {
+        mouse_show();
+        redraw_window(i);
+        return;
+    }
+    mouse_show();
+    if (d > 0) { /* moved up: the rows at the bottom are new (and the cut-off one) */
+        fresh = rect_make(p.list.x, y0 + (p.visible - d) * ROW_H, p.list.w, end - (y0 + (p.visible - d) * ROW_H));
+    } else { /* moved down: the rows at the top, and the cut-off strip at the bottom (which
+              * the editor leaves blank, and a list fills with the row after) */
+        fresh = rect_make(p.list.x, p.list.y, p.list.w, 1 + -d * ROW_H);
+        redraw(&fresh);
+        fresh = rect_make(p.list.x, y0 + p.visible * ROW_H, p.list.w, end - (y0 + p.visible * ROW_H));
+    }
+    redraw(&fresh);
+    redraw(&p.track);
+}
+
 static void scroll_by(int i, int d)
 {
     Win *w = &A.win[i];
@@ -743,8 +865,10 @@ static void scroll_by(int i, int d)
 
     window_parts(i, &p);
     if (w->kind == WIN_EDIT) {
+        unsigned before = E.top_line;
+
         edit_scroll(d);
-        redraw_window(i);
+        show_scrolled(i, (int)E.top_line - (int)before);
         return;
     }
     top = w->top + d;
@@ -753,8 +877,9 @@ static void scroll_by(int i, int d)
     if (top < 0)
         top = 0;
     if (top != w->top) {
+        d = top - w->top;
         w->top = top;
-        redraw_window(i);
+        show_scrolled(i, d);
     }
 }
 
@@ -1582,7 +1707,7 @@ static void ed_snap(EdSnap *s)
     s->anchor = E.anchor;
     s->anchor_line = E.anchor_line;
     s->len = tb_len(&E.t);
-    s->col = E.cur - tb_line_start(&E.t, E.cur);
+    s->col = E.cur - tb_line_start(&E.t, E.cur); /* in the line, not the view */
     s->modified = E.modified;
 }
 
@@ -1623,21 +1748,58 @@ static unsigned umax(unsigned a, unsigned b)
 
 /* After an edit or a move: the whole window if the view moved or lines came or went; else
  * the caret's old and new rows, or every row a selection covered before or covers now. */
+/* Part of a view row, from view column col, n columns (or to the end, if n is 0). */
+static void redraw_cells(unsigned line, int col, int n)
+{
+    WinParts p;
+    Rect r;
+    int x;
+
+    if (line < E.top_line || line >= E.top_line + (unsigned)E.rows || col < 0)
+        return;
+    window_parts(EDIT_WIN, &p);
+    x = p.list.x + 4 + col * 8;
+    r = rect_make(x, p.list.y + 1 + (int)(line - E.top_line) * ROW_H, n > 0 ? n * 8 : p.list.x + p.list.w - x, ROW_H);
+    redraw(&r);
+}
+
 static void editor_refresh(const EdSnap *b)
 {
     WinParts p;
+    int col = (int)(E.cur - tb_line_start(&E.t, E.cur)) - (int)E.left, old_col = (int)b->col - (int)b->left;
+    Rect info;
 
-    if (E.top_line != b->top_line || E.left != b->left || E.lines != b->lines) {
+    if (E.left != b->left || E.lines != b->lines) {
         redraw_window(EDIT_WIN);
         return;
     }
     window_parts(EDIT_WIN, &p);
+    if (E.top_line != b->top_line) { /* scrolled: the old caret moves with the text, then goes */
+        if (b->cur == b->anchor && E.cur == E.anchor && tb_len(&E.t) == b->len) {
+            show_scrolled(EDIT_WIN, (int)E.top_line - (int)b->top_line);
+            redraw_cells(b->cur_line, old_col, 1);
+            redraw_cells(E.cur_line, col, 1);
+            redraw(&p.info);
+            return;
+        }
+        redraw_window(EDIT_WIN);
+        return;
+    }
     if (E.modified != b->modified)
         redraw(&p.title); /* " *" after its name */
     if (b->cur == b->anchor && E.cur == E.anchor) {
-        redraw_lines(b->cur_line, b->cur_line);
-        if (E.cur_line != b->cur_line)
-            redraw_lines(E.cur_line, E.cur_line);
+        if (tb_len(&E.t) != b->len) /* typed on one line: from the caret to its end */
+            redraw_cells(E.cur_line, col < old_col ? col : old_col, 0);
+        else { /* moved: the two places the caret left and reached */
+            redraw_cells(b->cur_line, old_col, 1);
+            redraw_cells(E.cur_line, col, 1);
+        }
+        if (tb_len(&E.t) == b->len) { /* "Line, Col" changed; the count of characters didn't */
+            info = p.info;
+            info.w /= 2;
+            redraw(&info);
+            return;
+        }
     } else {
         redraw_lines(umin(umin(b->cur_line, b->anchor_line), umin(E.cur_line, E.anchor_line)),
                      umax(umax(b->cur_line, b->anchor_line), umax(E.cur_line, E.anchor_line)));
@@ -2912,6 +3074,18 @@ static void stuff_key(int ch)
     int86(0x16, &r, &r);
 }
 
+static int dump_screen(const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    int ok;
+
+    if (f == NULL)
+        return 0;
+    ok = gfx_driver()->dump(f);
+    fclose(f);
+    return ok;
+}
+
 static int shot(int scene, const char *path)
 {
     FILE *f;
@@ -3079,6 +3253,74 @@ static int shot(int scene, const char *path)
         delete_selected(d);
         fprintf(out, "%d\n", A.win[d].nrows);
         fclose(out);
+    } else if (scene == 21 || scene == 22) {
+        /* Drawing only what changes ends up the same as drawing it all (tools/dostest.sh):
+         * 21 windows and a folder list, 22 the editor, each left in front to be seen. */
+        FILE *f;
+        int k;
+
+        open_games();
+        open_drive('D');
+        bring_to_front(1);
+        bring_to_front(GAMES_WIN);
+        for (k = 0; k < DIR_WINS; k++) /* D:'s, behind */
+            if (A.win[k].open && A.win[k].path[0] == 'D')
+                close_window(k);
+        close_window(GAMES_WIN);
+        if (scene == 21) {
+            enter_dir(1, "MANY");
+            scroll_by(1, 3);
+            scroll_by(1, -1);
+            select_row(1, 2);
+            for (k = 0; k < 14; k++) /* down past the bottom: scrolls a row at a time */
+                select_rows(1, A.win[1].sel + 1, PICK_ONE);
+            select_rows(1, A.win[1].sel + 1, PICK_RANGE);
+            select_rows(1, A.win[1].sel - 4, PICK_TOGGLE);
+            select_rows(1, A.win[1].top, PICK_ONE); /* back up past the top */
+            select_rows(1, A.win[1].sel - 1, PICK_ONE);
+            scroll_by(1, 2);
+        } else {
+            open_in_editor("C:\\LONG.TXT");
+            editor_key(0, 81, 0); /* Page Down */
+            for (k = 0; k < 20; k++)
+                editor_key(0, 80, 0);
+            for (k = 0; k < 3; k++)
+                editor_key(0, 72, 0);
+            editor_key('x', 0, 0);
+            editor_key('y', 0, 0);
+            editor_key(8, 0, 0);
+            editor_key(0, 77, 0);
+            editor_key(0, 80, 1);
+            editor_key(0, 80, 1);
+            scroll_by(EDIT_WIN, 5);
+            scroll_by(EDIT_WIN, -2);
+            editor_key(0, 80, 0);
+        }
+        f = fopen("C:\\OUT\\INCR.BIN", "wb");
+        if (f == NULL)
+            return 0;
+        gfx_driver()->dump(f);
+        fclose(f);
+        draw_desktop(&FULL); /* and the dump below is the same screen drawn whole */
+    } else if (scene == 23) { /* the pointer: hidden only over what's drawn in Paper, everywhere in Ink (tools/dostest.sh) */
+        Rect away = rect_make(0, 150, 64, 40), over = rect_make(280, 90, 64, 30);
+        union REGS r;
+
+        if (!mouse_init())
+            return 0;
+        r.x.ax = 4; /* the pointer to (300, 100) */
+        r.x.cx = 300;
+        r.x.dx = 100;
+        int86(0x33, &r, &r);
+        mouse_show();
+        dump_screen("C:\\OUT\\PTRSHOWN.BIN");
+        mouse_hide_in(&away);
+        dump_screen("C:\\OUT\\PTRAWAY.BIN");
+        mouse_show();
+        mouse_hide_in(&over);
+        dump_screen("C:\\OUT\\PTROVER.BIN");
+        mouse_show();
+        mouse_hide(); /* and the dump below has no pointer */
     } else if (scene == 20) { /* the System menu, Quit highlighted */
         open_menu(0);
         set_hot(COUNT(system_items) - 1);
@@ -3098,6 +3340,75 @@ static int shot(int scene, const char *path)
     ok = gfx_driver()->dump(f);
     fclose(f);
     return ok;
+}
+
+/* ---- Timing the drawing ---- */
+
+/* PETITE /BENCH /DUMP=FILE.TXT: time the drawing that people wait for, in BIOS ticks (18.2
+ * a second), and write the results to FILE.TXT. tools/bench.sh runs it at about PC/XT speed,
+ * with C:\MANY (100 files) and C:\BENCH.TXT (300 lines) to scroll through. */
+static void bench_line(FILE *out, const char *what, unsigned long start, int times)
+{
+    unsigned long t = ticks() - start;
+
+    fprintf(out, "%-28s %5lu ticks for %3d: %4lu ms each\n", what, t, times, t * 1000UL / 182UL * 10UL / (unsigned long)times);
+    fflush(out);
+}
+
+static void benchmark(const char *path)
+{
+    FILE *out = fopen(path, "w");
+    unsigned long t;
+    int k;
+
+    if (out == NULL)
+        return;
+    fprintf(out, "PetiteGUI %s, %s\n", PETITE_VERSION, gfx_driver()->name);
+    draw_desktop(&FULL);
+    for (t = ticks(); t == ticks();) /* start on a tick */
+        ;
+    t = ticks();
+    for (k = 0; k < 2; k++)
+        draw_desktop(&FULL);
+    bench_line(out, "the whole screen", t, 2);
+    t = ticks();
+    for (k = 0; k < 4; k++)
+        redraw_window(1);
+    bench_line(out, "a folder window", t, 4);
+    t = ticks();
+    for (k = 0; k < 4; k++) {
+        open_menu(FILE_MENU);
+        close_menu();
+    }
+    bench_line(out, "the File menu, open and shut", t, 4);
+    t = ticks();
+    for (k = 0; k < 20; k++)
+        gfx_text(8, 100, "The quick brown fox jumps over the lazy dog, 0123456789 times.", A.theme->text, 0);
+    bench_line(out, "a line of 62 characters", t, 20);
+    enter_dir(1, "MANY");
+    t = ticks();
+    for (k = 0; k < 12; k++)
+        scroll_by(1, 1);
+    bench_line(out, "a folder scrolled a line", t, 12);
+    t = ticks();
+    for (k = 0; k < 12; k++)
+        select_row(1, A.win[1].sel + 1);
+    bench_line(out, "the next row selected", t, 12);
+    open_in_editor("C:\\BENCH.TXT");
+    t = ticks();
+    for (k = 0; k < 12; k++)
+        scroll_by(EDIT_WIN, 1);
+    bench_line(out, "the editor scrolled a line", t, 12);
+    editor_key(0, 119, 0); /* Ctrl+Home: the caret to the start of a full line */
+    t = ticks();
+    for (k = 0; k < 12; k++)
+        editor_key('x', 0, 0);
+    bench_line(out, "a character typed", t, 12);
+    t = ticks();
+    for (k = 0; k < 12; k++)
+        editor_key(0, 80, 0);
+    bench_line(out, "the caret down a line", t, 12);
+    fclose(out);
 }
 
 /* ---- The command line ---- */
@@ -3168,7 +3479,7 @@ static int run_by_name(const char *name)
 int main(int argc, char **argv)
 {
     int i, scene = -1, force = 0, old_mode = video_mode(), x, y, b, prev = 0, ch;
-    int scan = 0, list = 0, mem = 0, saver = SAVER_UNKNOWN, mx = -1, my = -1;
+    int scan = 0, list = 0, mem = 0, saver = SAVER_UNKNOWN, mx = -1, my = -1, bench = 0;
     long saver_steps = 300;
     unsigned long last_input = 0;
     const char *run_name = NULL, *set_arg = NULL;
@@ -3201,6 +3512,8 @@ int main(int argc, char **argv)
             saver_steps = atol(argv[i] + 7);
         else if (strnicmp(argv[i], "/SET=", 5) == 0 && strchr(argv[i] + 5, ':') != NULL)
             set_arg = argv[i] + 5;
+        else if (stricmp(argv[i], "/BENCH") == 0)
+            bench = 1;
         else {
             printf("PetiteGUI %s\nUsage: PETITE [/CGA | /EGA] [/SCAN] [/LIST] [/RUN=name] [/MEM] [/SET=key:value]\n",
                    PETITE_VERSION);
@@ -3270,6 +3583,12 @@ int main(int argc, char **argv)
         }
         set_video_mode(old_mode);
         return f == NULL;
+    }
+    if (bench) {
+        shot_mode = 1;
+        benchmark(dump);
+        set_video_mode(old_mode);
+        return 0;
     }
     if (scene >= 0) {
         int ok;

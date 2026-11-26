@@ -44,6 +44,17 @@ typedef struct Driver {
     void (*blank)(int off);
     /* Show colour index i as CGA colour map[i] (0-15); Paper shows only map[1], its ink. */
     void (*palette)(const uint8_t *map);
+
+    /* n characters of 8 x 8 text, whole and on the screen: only the set pixels are drawn.
+     * font is the BIOS font (8 bytes a character), s already 0-127. One call per run of
+     * characters, so the card is set up once, not once per glyph row. */
+    void (*text)(int x, int y, const uint8_t __far *font, const char *s, int n, uint8_t c);
+    /* Copy h rows of the byte-aligned columns x..x+w-1 from y to to_y (the two may overlap:
+     * scrolling a list moves what's already drawn). */
+    void (*copy_rows)(int x, int y, int w, int h, int to_y);
+    /* Drawing changes the card's registers (the EGA's graphics controller), so the mouse
+     * driver mustn't draw the pointer meanwhile, anywhere: see mouse_hide_in. */
+    int uses_registers;
 } Driver;
 
 extern const Driver drv_cga;
@@ -83,6 +94,10 @@ void gfx_palette(const uint8_t *map);
 void gfx_palette_reset(void);
 /* The BIOS font's 8 rows for a character. */
 const uint8_t __far *gfx_glyph(unsigned char ch);
+
+/* Move what's drawn in r (byte-aligned across, and wholly on the screen) by dy rows, down if
+ * it's positive; the rows it leaves aren't touched. Zero if r isn't like that. */
+int gfx_scroll(const Rect *r, int dy);
 
 /* Save what's under r (clipped to the screen); NULL if there's no memory. */
 uint8_t __far *gfx_save(const Rect *r);

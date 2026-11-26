@@ -13,7 +13,7 @@ The basics first: desktop, menu bar and menus, windows, icons, alerts, the point
 - **C89 for `wcc`:** declarations at the top of a block. `int` is 16 bits: use `long` past 32,767, and cast before multiplying sizes (`(long)a * b`).
 - **Medium model** (since 0.4.0): code in as many 64 KB segments as it needs, all data in one (DGROUP, 64 KB with the stack). Calls are far, data pointers near. Video memory and DOS blocks are `__far`; never keep a near pointer to them. `swapcore.asm`'s entry points are far (`retf`).
 - **Drivers own the hardware.** Only `drv_*.c` touch video memory or video ports; `draw.c` calls only `gfx_*`. A driver function gets coordinates already clipped to the screen, and an EGA one leaves the graphics controller at the BIOS defaults (the mouse driver relies on them).
-- **Hide the mouse** (`mouse_hide`/`mouse_show`, which nest) around anything that draws, reads or saves video memory.
+- **Hide the mouse** (`mouse_hide`/`mouse_show`, which nest, or `mouse_hide_in(area)` for drawing only there) around anything that draws, reads or saves video memory.
 - **Window edges on 8-pixel columns** (`SNAP8`), so drawing is whole bytes.
 - **Pixels are 2.4:1 tall** in 640×200: square-looking things are wider than tall in pixels.
 - **Paper and Ink share everything but the driver and the theme.** A new widget takes its colours from `Theme`, never a literal.
@@ -30,6 +30,7 @@ The basics first: desktop, menu bar and menus, windows, icons, alerts, the point
 - `make shots`: every scene in both looks through DOSBox-X (`/SHOT=n /DUMP=`), as PNGs in `build/shots/`. After any drawing change, take them and look; copy good ones to `docs/img/` when they show something new.
 - `make dostest`: end-to-end tests in DOSBox-X (scanning, swapping, running games, the play log). Run it after any change to games, launching or swapping.
 - `tools/run.sh [paper|ink]`: interactive, at about PC/XT speed. Needs NASM too.
+- `tools/bench.sh`: the drawing timed at PC/XT speed (`PETITE /BENCH`). Run it before and after a change meant to make drawing faster.
 
 ## Versioning
 

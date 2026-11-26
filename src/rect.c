@@ -71,3 +71,27 @@ Rect rect_resize(const Rect *r, int w, int h, int min_w, int min_h, int max_x, i
     out.h = h;
     return out;
 }
+
+int rect_subtract(const Rect *a, const Rect *b, Rect *out)
+{
+    Rect cut;
+    int n = 0, top, bottom;
+
+    if (rect_empty(a))
+        return 0;
+    if (!rect_intersect(&cut, a, b)) {
+        out[0] = *a;
+        return 1;
+    }
+    top = cut.y;
+    bottom = cut.y + cut.h;
+    if (top > a->y) /* above the cut, the full width */
+        out[n++] = rect_make(a->x, a->y, a->w, top - a->y);
+    if (bottom < a->y + a->h) /* below it */
+        out[n++] = rect_make(a->x, bottom, a->w, a->y + a->h - bottom);
+    if (cut.x > a->x) /* beside it, its height */
+        out[n++] = rect_make(a->x, top, cut.x - a->x, cut.h);
+    if (cut.x + cut.w < a->x + a->w)
+        out[n++] = rect_make(cut.x + cut.w, top, a->x + a->w - cut.x - cut.w, cut.h);
+    return n;
+}
