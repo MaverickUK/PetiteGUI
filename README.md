@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-blue" alt="Licence: GPL-3.0"></a>
 </p>
 
-A small mouse based desktop for CGA and EGA PCs designed for simple file management tasks (Copy, move, rename, delete, edit text, run) along with integrate games listing support from [GameMinder](https://github.com/MaverickUK/GameMinder)
+A small mouse based desktop for CGA and EGA PCs designed for simple file management tasks (Copy, move, rename, delete, edit text, run) along with integrated games listing support from [GameMinder](https://github.com/MaverickUK/GameMinder)
 
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
