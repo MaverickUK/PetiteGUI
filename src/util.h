@@ -12,8 +12,11 @@ void fmt_thousands(long v, char *buf);
 /* Directory paths end with a backslash: "C:\GAMES\KEEN\". */
 /* Go up one level, putting the name left in child (if not NULL). Zero at a drive's root. */
 int path_parent(char *path, char *child, int child_size);
-/* Files the editor opens on a double-click: .TXT, .INI and .CFG. */
+/* Files the editor opens on a double-click: .TXT, .INI and .CFG, and AUTOEXEC.BAT and
+ * CONFIG.SYS. name may be a full path. */
 int path_is_text(const char *name);
+/* strcmp ignoring the case of A-Z (stricmp isn't standard C, so the host tests can't use it). */
+int stricmp_ascii(const char *a, const char *b);
 /* dir (ending in a backslash) and name: "C:\GAMES\" + "DOOM" -> "C:\GAMES\DOOM". Zero if it
  * wouldn't fit in size. */
 int path_join(char *out, int size, const char *dir, const char *name);

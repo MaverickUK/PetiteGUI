@@ -15,9 +15,10 @@
  *                     4 the first game run from the list and back, 5 the editor,
  *                     6 the right-click menu, 7 an edit saved, 8 windows resized and zoomed,
  *                     9 the About box, 10 a command run, 11 a batch file opened, 12 Run...,
- *                     13 file operations, 14 deleting a folder),
+ *                     13 file operations, 14 deleting a folder, 15 a selection and the Edit
+ *                     menu, 16 the clipboard, Find and Save as), write video memory to
+ *                     FILE.BIN and quit: tools/shot.sh makes a PNG
  *   PETITE /DRIVES    list the drives found, and quit
- *                     write video memory to FILE.BIN and quit: tools/shot.sh makes a PNG
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
  * changes redraws only the rectangle it changed, back to front. */
@@ -35,6 +36,7 @@
 #include "gamecols.h"
 #include "games.h"
 #include "gfx.h"
+#include "keyboard.h"
 #include "launch.h"
 #include "mouse.h"
 #include "saver.h"
@@ -49,7 +51,9 @@ enum {
     CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK,
     CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY,
     CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP,
-    CMD_SAVER_NOW, CMD_RUN_DIALOG, CMD_DOS_PROMPT, CMD_RENAME, CMD_MOVE
+    CMD_SAVER_NOW, CMD_RUN_DIALOG, CMD_DOS_PROMPT, CMD_RENAME, CMD_MOVE,
+    CMD_NEW_TEXT, CMD_SAVE_AS, CMD_CUT, CMD_COPY_TEXT, CMD_PASTE, CMD_SELECT_ALL, CMD_FIND,
+    CMD_FIND_NEXT
 };
 #define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
 #define CMD_SAVER_DELAY 400 /* + minutes */
@@ -60,7 +64,7 @@ static MenuItem system_items[] = {
 };
 enum { /* file_items' places */
     FI_OPEN, FI_OPEN_TEXT, FI_RUN, FI_PROMPT, FI_INFO, FI_SEP1, FI_NEW_FOLDER, FI_RENAME, FI_COPY,
-    FI_MOVE, FI_DELETE, FI_SEP2, FI_SAVE, FI_CLOSE, FI_QUIT
+    FI_MOVE, FI_DELETE, FI_SEP2, FI_NEW_TEXT, FI_SAVE, FI_SAVE_AS, FI_CLOSE, FI_QUIT
 };
 static MenuItem file_items[] = {
     { "Open", "Ctrl+O", 0, CMD_OPEN },
@@ -75,9 +79,22 @@ static MenuItem file_items[] = {
     { "Move...", "F6", 0, CMD_MOVE },
     { "Delete...", "Del", 0, CMD_DELETE },
     { "", NULL, MI_SEP, 0 },
+    { "New text file", "Ctrl+N", 0, CMD_NEW_TEXT },
     { "Save", "Ctrl+S", 0, CMD_SAVE },
+    { "Save as...", NULL, 0, CMD_SAVE_AS },
     { "Close", "Ctrl+W", 0, CMD_CLOSE },
     { "Quit", "Ctrl+Q", 0, CMD_QUIT },
+};
+/* The Edit menu, for the editor; the right-click menu in the editor is its first four. */
+enum { EI_CUT, EI_COPY, EI_PASTE, EI_SELECT_ALL, EI_SEP, EI_FIND, EI_FIND_NEXT };
+static MenuItem edit_items[] = {
+    { "Cut", "Ctrl+X", 0, CMD_CUT },
+    { "Copy", "Ctrl+C", 0, CMD_COPY_TEXT },
+    { "Paste", "Ctrl+V", 0, CMD_PASTE },
+    { "Select all", "Ctrl+A", 0, CMD_SELECT_ALL },
+    { "", NULL, MI_SEP, 0 },
+    { "Find...", "Ctrl+F", 0, CMD_FIND },
+    { "Find next", "F3", 0, CMD_FIND_NEXT },
 };
 /* The right-click menus: on a file, and on a game. */
 enum { FC_OPEN, FC_OPEN_TEXT, FC_RUN, FC_INFO, FC_SEP, FC_RENAME, FC_COPY, FC_MOVE, FC_DELETE };
@@ -147,6 +164,7 @@ static MenuItem options_items[] = {
 };
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #define FILE_MENU 1
+#define EDIT_MENU 2
 #define FILE_DELETE FI_DELETE
 
 /* ---- Setting up ---- */
@@ -221,7 +239,7 @@ static void app_init(void)
         { 24, MENU_H + 14, 264, 100 }, { 176, MENU_H + 30, 336, 122 },
         { 64, MENU_H + 46, 336, 122 }, { 104, MENU_H + 22, 336, 122 }
     };
-    static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Games", "Saver", "Options" };
+    static const char *const titles[NUM_MENUS] = { "System", "File", "Edit", "View", "Games", "Saver", "Options" };
     MenuItem *items[NUM_MENUS];
     int counts[NUM_MENUS], i, x = 16;
 
@@ -260,14 +278,16 @@ static void app_init(void)
     counts[0] = COUNT(system_items);
     items[1] = file_items;
     counts[1] = COUNT(file_items);
-    items[2] = view_items;
-    counts[2] = COUNT(view_items);
-    items[3] = games_items;
-    counts[3] = COUNT(games_items);
-    items[4] = saver_items;
-    counts[4] = COUNT(saver_items);
-    items[5] = options_items;
-    counts[5] = COUNT(options_items);
+    items[2] = edit_items;
+    counts[2] = COUNT(edit_items);
+    items[3] = view_items;
+    counts[3] = COUNT(view_items);
+    items[4] = games_items;
+    counts[4] = COUNT(games_items);
+    items[5] = saver_items;
+    counts[5] = COUNT(saver_items);
+    items[6] = options_items;
+    counts[6] = COUNT(options_items);
     for (i = 0; i < NUM_MENUS; i++) {
         A.menu[i].title = titles[i];
         A.menu[i].items = items[i];
@@ -304,7 +324,18 @@ static void update_menus(void)
     }
     file_context[FC_INFO].flags = (uint8_t)(up ? MI_OFF : 0);
     file_context[FC_RUN].flags = (uint8_t)(file && path_is_program(row->name) ? 0 : MI_OFF);
-    file_items[FI_SAVE].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
+    {
+        int ed = f == EDIT_WIN && E.open;
+        unsigned s, e;
+        uint8_t sel = (uint8_t)(ed && edit_selection(&s, &e) ? 0 : MI_OFF);
+
+        file_items[FI_SAVE].flags = (uint8_t)(ed && (E.modified || E.path[0] == '\0') ? 0 : MI_OFF);
+        file_items[FI_SAVE_AS].flags = (uint8_t)(ed ? 0 : MI_OFF);
+        edit_items[EI_CUT].flags = edit_items[EI_COPY].flags = sel;
+        edit_items[EI_PASTE].flags = (uint8_t)(ed && edit_can_paste() ? 0 : MI_OFF);
+        edit_items[EI_SELECT_ALL].flags = edit_items[EI_FIND].flags = (uint8_t)(ed ? 0 : MI_OFF);
+        edit_items[EI_FIND_NEXT].flags = (uint8_t)(ed ? 0 : MI_OFF);
+    }
     game_context[1].flags = (uint8_t)(game ? 0 : MI_OFF);
     {
         int c;
@@ -636,6 +667,7 @@ static void wait_release(int *x, int *y)
 }
 
 static void editor_view(void);
+static void editor_press(int x, int y);
 
 /* After a window changes size: keep its list scrolled within range, and the editor's view
  * the window's size. */
@@ -842,9 +874,10 @@ static void press_window(int i, int x, int y)
         scroll_by(i, y < p.track.y + p.track.h / 2 ? -p.visible : p.visible);
         wait_release(&ux, &uy);
     } else if (rect_contains(&p.list, x, y) && w->kind == WIN_EDIT) {
-        edit_click((y - p.list.y - 1) / ROW_H, (x - p.list.x - 4) / 8);
-        redraw_window(i);
-        wait_release(&ux, &uy);
+        if (E.open)
+            editor_press(x, y);
+        else
+            wait_release(&ux, &uy);
     } else if (rect_contains(&p.list, x, y)) {
         static unsigned long last_time;
         static int last_win = -1, last_row = -1;
@@ -970,6 +1003,8 @@ static void enter_dir(int i, const char *name)
 }
 
 static void open_in_editor(const char *path);
+static void editor_title(void);
+static const char *current_dir(void);
 static void run_program(const char *dir, const char *prog, const char *args, int shell,
                         const char *banner, int wait);
 
@@ -1080,9 +1115,10 @@ static const char *progress_verb;
 static int show_progress(const char *name, long done)
 {
     char line[40];
+    int ext;
     size_t n = strlen(name);
 
-    if (kbhit() && getch() == 27)
+    if (kb_hit() && kb_read(&ext) == 27)
         return 0;
     sprintf(line, "%s %ld of %ld file%s...", progress_verb, done + 1, progress_total, progress_total == 1 ? "" : "s");
     sprintf(A.alert.line1, "%-30s", line);
@@ -1117,7 +1153,7 @@ static void editor_follow(const char *from, const char *to)
     if (to != NULL) {
         strncpy(E.path, to, sizeof E.path - 1);
         strncpy(E.name, base_name(to), sizeof E.name - 1);
-        A.win[EDIT_WIN].title = E.path;
+        editor_title();
         redraw_window(EDIT_WIN);
     } else if (!E.modified) {
         edit_close();
@@ -1373,16 +1409,121 @@ static void editor_view(void)
     edit_set_view(p.visible, (p.list.w - 8) / 8);
 }
 
+static void editor_title(void)
+{
+    A.win[EDIT_WIN].title = E.path[0] ? E.path : E.name;
+}
+
+/* The editor's state before a change, to redraw only what the change touched. */
+typedef struct EdSnap {
+    unsigned top_line, left, lines, cur, cur_line, anchor, anchor_line, len, col;
+    int modified;
+} EdSnap;
+
+static void ed_snap(EdSnap *s)
+{
+    s->top_line = E.top_line;
+    s->left = E.left;
+    s->lines = E.lines;
+    s->cur = E.cur;
+    s->cur_line = E.cur_line;
+    s->anchor = E.anchor;
+    s->anchor_line = E.anchor_line;
+    s->len = tb_len(&E.t);
+    s->col = E.cur - tb_line_start(&E.t, E.cur);
+    s->modified = E.modified;
+}
+
+/* The rectangle of the editor's lines lo..hi that are in view; zero if none are. */
+static int editor_lines_rect(unsigned lo, unsigned hi, Rect *r)
+{
+    WinParts p;
+    unsigned last = E.top_line + (unsigned)E.rows - 1;
+
+    if (lo < E.top_line)
+        lo = E.top_line;
+    if (hi > last)
+        hi = last;
+    if (lo > hi)
+        return 0;
+    window_parts(EDIT_WIN, &p);
+    *r = rect_make(p.list.x, p.list.y + 1 + (int)(lo - E.top_line) * ROW_H, p.list.w, (int)(hi - lo + 1) * ROW_H);
+    return 1;
+}
+
+static void redraw_lines(unsigned lo, unsigned hi)
+{
+    Rect r;
+
+    if (editor_lines_rect(lo, hi, &r))
+        redraw(&r);
+}
+
+static unsigned umin(unsigned a, unsigned b)
+{
+    return a < b ? a : b;
+}
+
+static unsigned umax(unsigned a, unsigned b)
+{
+    return a > b ? a : b;
+}
+
+/* After an edit or a move: the whole window if the view moved or lines came or went; else
+ * the caret's old and new rows, or every row a selection covered before or covers now. */
+static void editor_refresh(const EdSnap *b)
+{
+    WinParts p;
+
+    if (E.top_line != b->top_line || E.left != b->left || E.lines != b->lines) {
+        redraw_window(EDIT_WIN);
+        return;
+    }
+    window_parts(EDIT_WIN, &p);
+    if (E.modified != b->modified)
+        redraw(&p.title); /* " *" after its name */
+    if (b->cur == b->anchor && E.cur == E.anchor) {
+        redraw_lines(b->cur_line, b->cur_line);
+        if (E.cur_line != b->cur_line)
+            redraw_lines(E.cur_line, E.cur_line);
+    } else {
+        redraw_lines(umin(umin(b->cur_line, b->anchor_line), umin(E.cur_line, E.anchor_line)),
+                     umax(umax(b->cur_line, b->anchor_line), umax(E.cur_line, E.anchor_line)));
+    }
+    redraw(&p.info);
+}
+
+static void show_editor(void)
+{
+    editor_title();
+    editor_view();
+    if (A.win[EDIT_WIN].open) {
+        bring_to_front(EDIT_WIN);
+        redraw_window(EDIT_WIN);
+    } else {
+        open_window(EDIT_WIN);
+    }
+}
+
+/* Changes in the editor stop it being replaced: say so. Zero if there are none. */
+static int editor_busy(void)
+{
+    char line[40];
+
+    if (!E.open || !E.modified)
+        return 0;
+    sprintf(line, "Save %s first.", E.name);
+    show_alert(line, "It has changes not saved.", "OK", NULL, CMD_NONE);
+    return 1;
+}
+
 static void open_in_editor(const char *path)
 {
     char line[40];
     int rc;
 
-    if (E.open && E.modified) {
-        sprintf(line, "Save %s first.", E.name);
-        show_alert(line, "It has changes not saved.", "OK", NULL, CMD_NONE);
+    if (editor_busy())
         return;
-    }
     if (E.open)
         edit_close();
     rc = edit_open(path);
@@ -1397,30 +1538,99 @@ static void open_in_editor(const char *path)
             close_window(EDIT_WIN);
         return;
     }
-    A.win[EDIT_WIN].title = E.path;
-    editor_view();
-    if (A.win[EDIT_WIN].open) {
-        bring_to_front(EDIT_WIN);
-        redraw_window(EDIT_WIN);
-    } else {
-        open_window(EDIT_WIN);
+    show_editor();
+}
+
+/* File > New text file: an empty editor, its name asked for when it's first saved. */
+static void new_text_file(void)
+{
+    if (editor_busy())
+        return;
+    if (E.open)
+        edit_close();
+    if (edit_new() != EDIT_OK) {
+        show_alert("Can't start a new file:", "there isn't enough memory.", "OK", NULL, CMD_NONE);
+        if (A.win[EDIT_WIN].open)
+            close_window(EDIT_WIN);
+        return;
     }
+    show_editor();
+}
+
+/* After a save: the title loses its " *", and the folders show the file's new size. */
+static void after_save(void)
+{
+    int i;
+
+    editor_title();
+    redraw_window(EDIT_WIN);
+    for (i = 0; i < DIR_WINS; i++)
+        if (A.win[i].open)
+            reload_dir(i);
+}
+
+/* File > Save as...: ask for a path, in the front folder unless it says otherwise. */
+static int save_editor_as(void)
+{
+    char path[FIELD_MAX + 1], full[FIELD_MAX + 1], dir[FIELD_MAX + 1], line[48];
+    const char *name;
+    size_t n;
+
+    strcpy(path, E.path[0] ? E.path : current_dir());
+    if (!ask_text("Save as:", path, sizeof path) || path[0] == '\0')
+        return 0;
+    strupr(path);
+    if (path[0] == '\\') /* from the root of the front folder's drive */
+        sprintf(full, "%.2s%.*s", current_dir(), (int)sizeof full - 3, path);
+    else if (strchr(path, ':') == NULL) /* a bare name, or a path below the front folder */
+        path_join(full, sizeof full, current_dir(), path);
+    else
+        strcpy(full, path);
+    name = base_name(full);
+    n = (size_t)(name - full);
+    memcpy(dir, full, n);
+    dir[n] = '\0';
+    if (n > 3 && dir[n - 1] == '\\') /* fo_is_dir wants "C:\GAMES", or "C:\" */
+        dir[n - 1] = '\0';
+    if (!path_valid_name(name)) {
+        show_alert("That isn't a name DOS takes:", "8 characters, a dot, then 3.", "OK", NULL, CMD_NONE);
+        return 0;
+    }
+    if (dir[0] == '\0' || !fo_is_dir(dir)) {
+        sprintf(line, "There's no folder %.20s.", dir);
+        show_alert(line, "", "OK", NULL, CMD_NONE);
+        return 0;
+    }
+    if (stricmp(full, E.path) != 0 && fo_exists(full)) {
+        sprintf(line, "There's a %.13s there already.", name);
+        if (fo_is_dir(full)) {
+            show_alert(line, "It's a folder.", "OK", NULL, CMD_NONE);
+            return 0;
+        }
+        if (!ask_choice(line, "Replace it?", "Cancel", "Replace"))
+            return 0;
+    }
+    if (edit_save_as(full) != EDIT_OK) {
+        sprintf(line, "Couldn't save %.13s.", name);
+        show_alert(line, "Is the disk full or read-only?", "OK", NULL, CMD_NONE);
+        return 0;
+    }
+    after_save();
+    return 1;
 }
 
 static int save_editor(void)
 {
     char line[40];
-    int i;
 
+    if (E.path[0] == '\0') /* not saved before: where to? */
+        return save_editor_as();
     if (edit_save() != EDIT_OK) {
         sprintf(line, "Couldn't save %s.", E.name);
         show_alert(line, "Is the disk full or read-only?", "OK", NULL, CMD_NONE);
         return 0;
     }
-    redraw_window(EDIT_WIN);
-    for (i = 0; i < DIR_WINS; i++) /* its size changed */
-        if (A.win[i].open)
-            reload_dir(i);
+    after_save();
     return 1;
 }
 
@@ -1442,31 +1652,102 @@ static int ask_to_save(int cmd_save, int cmd_discard)
     return 1;
 }
 
-/* A key for the editor: redraw only the rows that changed, unless the view moved. */
-static void editor_key(int ch, int ext)
+static void editor_full(void)
+{
+    show_alert("The file can't grow any more.", "Save it, or remove some text.", "OK", NULL, CMD_NONE);
+}
+
+/* A key for the editor; with shift, moving selects. */
+static void editor_key(int ch, int ext, int shift)
+{
+    EdSnap b;
+    int rc;
+
+    ed_snap(&b);
+    rc = edit_key(ch, ext, shift);
+    editor_refresh(&b);
+    if (rc == EDIT_FULL)
+        editor_full();
+}
+
+/* Cut, Copy, Paste and Select all. */
+static void editor_command(int cmd)
+{
+    EdSnap b;
+    int rc = EDIT_OK;
+
+    if (front_window() != EDIT_WIN || !E.open)
+        return;
+    ed_snap(&b);
+    if (cmd == CMD_CUT)
+        rc = edit_cut();
+    else if (cmd == CMD_COPY_TEXT)
+        rc = edit_copy();
+    else if (cmd == CMD_PASTE)
+        rc = edit_paste();
+    else if (cmd == CMD_SELECT_ALL)
+        edit_select_all();
+    editor_refresh(&b);
+    if (rc == EDIT_NO_MEMORY)
+        show_alert("There isn't enough memory", "to copy that.", "OK", NULL, CMD_NONE);
+    else if (rc == EDIT_FULL)
+        editor_full();
+}
+
+/* Edit > Find... asks what (starting from the last thing found); Find next (F3) looks again. */
+static char find_text[FIELD_MAX + 1];
+
+static void find(int ask)
+{
+    char text[FIELD_MAX + 1], line[48];
+    EdSnap b;
+
+    if (front_window() != EDIT_WIN || !E.open)
+        return;
+    if (ask || find_text[0] == '\0') {
+        strcpy(text, find_text);
+        if (!ask_text("Find:", text, sizeof text) || text[0] == '\0')
+            return;
+        strcpy(find_text, text);
+    }
+    ed_snap(&b);
+    if (!edit_find(find_text)) {
+        sprintf(line, "Can't find \"%.20s\".", find_text);
+        show_alert(line, "", "OK", NULL, CMD_NONE);
+        return;
+    }
+    editor_refresh(&b);
+}
+
+/* A press in the editor's text: place the caret (Shift: extend the selection to it), then
+ * select as the pointer is dragged, scrolling when it goes past the top or bottom. */
+static void editor_press(int x, int y)
 {
     WinParts p;
-    unsigned top = E.top_line, left = E.left, lines = E.lines;
-    int old_row = (int)(E.cur_line - E.top_line), modified = E.modified, row, col;
-    Rect r;
+    EdSnap b;
+    int row, col, last_row = -2, last_col = -2, bt;
+    unsigned long next_scroll = 0;
+    int extend = (kb_shift() & KB_SHIFT) != 0;
 
-    if (edit_key(ch, ext) == EDIT_FULL) {
-        show_alert("The file can't grow any more.", "Save it, or remove some text.", "OK", NULL, CMD_NONE);
-        return;
-    }
     window_parts(EDIT_WIN, &p);
-    if (E.top_line != top || E.left != left || E.lines != lines || E.modified != modified) {
-        redraw_window(EDIT_WIN);
-        return;
+    for (;;) {
+        row = y < p.list.y + 1 ? -1 : (y - p.list.y - 1) / ROW_H;
+        if (row > E.rows)
+            row = E.rows;
+        col = x < p.list.x + 4 ? 0 : (x - p.list.x - 4) / 8;
+        if (row != last_row || col != last_col || ((row < 0 || row >= E.rows) && ticks() >= next_scroll)) {
+            ed_snap(&b);
+            edit_click(row, col, extend);
+            editor_refresh(&b);
+            last_row = row;
+            last_col = col;
+            next_scroll = ticks() + 2; /* past an edge it scrolls, about 9 lines a second */
+        }
+        extend = 1;
+        mouse_read(&x, &y, &bt);
+        if (!(bt & 1))
+            break;
     }
-    r = rect_make(p.list.x, p.list.y + 1 + old_row * ROW_H, p.list.w, ROW_H);
-    redraw(&r);
-    edit_caret(&row, &col);
-    if (row != old_row) {
-        r.y = p.list.y + 1 + row * ROW_H;
-        redraw(&r);
-    }
-    redraw(&p.info);
 }
 
 /* ---- Games ---- */
@@ -1632,12 +1913,11 @@ static void return_desktop(void)
 {
     int i;
 
-    while (kbhit())
-        getch();
+    kb_flush();
     critical_errors(1);
     if (A.win[EDIT_WIN].open) {
         if (edit_resume())
-            A.win[EDIT_WIN].title = E.path;
+            editor_title();
         else
             A.win[EDIT_WIN].open = 0;
     }
@@ -1692,9 +1972,10 @@ static void run_program(const char *dir, const char *prog, const char *args, int
     leave_desktop();
     status = launch_command(dir, prog, args, shell, banner);
     if (wait && !shot_mode) {
+        int ext;
+
         printf("\nPress any key to return to PetiteGUI");
-        if (getch() == 0)
-            getch();
+        kb_read(&ext);
     }
     return_desktop();
     if (status != 0)
@@ -1741,9 +2022,8 @@ static int ask_text(const char *prompt, char *text, int size)
     draw_input();
     mouse_show();
     while (result < 0) {
-        if (kbhit()) {
-            ch = getch();
-            ext = ch == 0 ? getch() : 0;
+        if (kb_hit()) {
+            ch = kb_read(&ext);
             if (ch == 13)
                 result = 1;
             else if (ch == 27)
@@ -1792,15 +2072,13 @@ static int ask_text(const char *prompt, char *text, int size)
  * first, or Esc). */
 static int ask_choice(const char *line1, const char *line2, const char *no, const char *yes)
 {
-    int x, y, b, prev = 1, ch, i, ux, uy, result = -1;
+    int x, y, b, prev = 1, ch, ext, i, ux, uy, result = -1;
 
     show_alert(line1, line2, no, yes, CMD_NONE);
     while (result < 0) {
-        if (kbhit()) {
-            ch = getch();
-            if (ch == 0)
-                getch();
-            else if (ch == 13)
+        if (kb_hit()) {
+            ch = kb_read(&ext);
+            if (ch == 13)
                 result = 1;
             else if (ch == 27)
                 result = 0;
@@ -1974,6 +2252,23 @@ static void run(int cmd)
     case CMD_SAVE:
         if (E.open)
             save_editor();
+        break;
+    case CMD_SAVE_AS:
+        if (E.open)
+            save_editor_as();
+        break;
+    case CMD_NEW_TEXT:
+        new_text_file();
+        break;
+    case CMD_CUT:
+    case CMD_COPY_TEXT:
+    case CMD_PASTE:
+    case CMD_SELECT_ALL:
+        editor_command(cmd);
+        break;
+    case CMD_FIND:
+    case CMD_FIND_NEXT:
+        find(cmd == CMD_FIND);
         break;
     case CMD_SAVE_CLOSE:
         if (save_editor())
@@ -2154,13 +2449,24 @@ static void on_right_press(int x, int y)
         close_menu();
         return;
     }
-    if (i < 0 || (A.win[i].kind != WIN_FILES && A.win[i].kind != WIN_GAMES))
+    if (i < 0)
         return;
     w = &A.win[i];
     bring_to_front(i);
     window_parts(i, &p);
     if (!rect_contains(&p.list, x, y))
         return;
+    if (w->kind == WIN_EDIT) { /* Cut, Copy, Paste, Select all: the selection stays */
+        if (!E.open)
+            return;
+        A.menu[CONTEXT_MENU].items = edit_items;
+        A.menu[CONTEXT_MENU].n = EI_SEP;
+        A.menu[CONTEXT_MENU].x = x;
+        A.menu[CONTEXT_MENU].y = y;
+        open_menu(CONTEXT_MENU);
+        track_menu(2);
+        return;
+    }
     k = w->top + (y - p.list.y - 1) / ROW_H;
     if (k >= w->nrows)
         return;
@@ -2230,7 +2536,17 @@ static void on_press(int x, int y)
     wait_release(&ux, &uy);
 }
 
-static void on_key(int ch)
+/* The control keys that are commands even in the editor (the rest it types, or ignores). */
+static int command_key(int ch, int ext)
+{
+    static const char keys[] = { 1, 3, 4, 6, 7, 14, 15, 17, 18, 19, 22, 23, 24, 0 };
+
+    if (ch == 0)
+        return ext == 61; /* F3 */
+    return ch < 32 && strchr(keys, ch) != NULL;
+}
+
+static void on_key(int ch, int ext)
 {
     int f = front_window();
 
@@ -2246,8 +2562,8 @@ static void on_key(int ch)
             close_menu();
         return;
     }
-    if (f == EDIT_WIN && E.open && ch != 4 && ch != 7 && ch != 15 && ch != 17 && ch != 18 && ch != 19 && ch != 23) {
-        editor_key(ch, ch == 0 ? getch() : 0);
+    if (f == EDIT_WIN && E.open && !command_key(ch, ext)) {
+        editor_key(ch, ext, (kb_shift() & KB_SHIFT) != 0);
         return;
     }
     switch (ch) {
@@ -2262,9 +2578,17 @@ static void on_key(int ch)
     case 9: run(CMD_INFO); break;    /* Ctrl+I */
     case 23: run(CMD_CLOSE); break;  /* Ctrl+W */
     case 17: run(CMD_QUIT); break;   /* Ctrl+Q */
-    case 0:
-        ch = getch(); /* an extended key */
-        if (ch == 83 || ch == 66) /* Delete, F8 */
+    case 14: run(CMD_NEW_TEXT); break; /* Ctrl+N */
+    case 24: run(CMD_CUT); break;    /* Ctrl+X */
+    case 3: run(CMD_COPY_TEXT); break; /* Ctrl+C */
+    case 22: run(CMD_PASTE); break;  /* Ctrl+V */
+    case 1: run(CMD_SELECT_ALL); break; /* Ctrl+A */
+    case 6: run(CMD_FIND); break;    /* Ctrl+F */
+    case 0: /* an extended key */
+        ch = ext;
+        if (ch == 61) /* F3 */
+            run(CMD_FIND_NEXT);
+        else if (ch == 83 || ch == 66) /* Delete, F8 */
             run(CMD_DELETE);
         else if (ch == 60) /* F2 */
             run(CMD_RENAME);
@@ -2316,8 +2640,8 @@ static int shot(int scene, const char *path)
         run(CMD_DELETE);
     } else if (scene == 5) { /* the editor */
         open_in_editor("C:\\GAMES\\MEMTEST\\!GM_INFO.TXT");
-        editor_key(0, 80);
-        editor_key(0, 79);
+        editor_key(0, 80, 0);
+        editor_key(0, 79, 0);
     } else if (scene == 6) { /* the right-click menu on a file */
         WinParts p;
         int k = find_row(1, "PETITE.CFG");
@@ -2330,11 +2654,11 @@ static int shot(int scene, const char *path)
         set_hot(1);
     } else if (scene == 7) { /* type a line into C:\\OUT\\EDIT.TXT and save it (tools/dostest.sh) */
         open_in_editor("C:\\OUT\\EDIT.TXT");
-        editor_key('H', 0);
-        editor_key('i', 0);
-        editor_key(13, 0);
-        editor_key(0, 117); /* Ctrl+End */
-        editor_key('!', 0);
+        editor_key('H', 0, 0);
+        editor_key('i', 0, 0);
+        editor_key(13, 0, 0);
+        editor_key(0, 117, 0); /* Ctrl+End */
+        editor_key('!', 0, 0);
         run(CMD_SAVE);
     } else if (scene == 8) { /* windows resized: C: smaller, the games list zoomed behind it */
         open_games();
@@ -2377,6 +2701,51 @@ static int shot(int scene, const char *path)
     } else if (scene == 14) { /* deleting a folder asks first, saying how much is in it */
         select_row(1, find_row(1, "GAMES"));
         run(CMD_DELETE);
+    } else if (scene == 15) { /* a selection in the editor, and the Edit menu */
+        open_in_editor("C:\\GAMES\\MEMTEST\\!GM_INFO.TXT");
+        editor_key(0, 80, 0);
+        editor_key(0, 80, 0);
+        editor_key(0, 77, 1); /* Shift+right, Shift+down: from "developer" into "genre" */
+        editor_key(0, 80, 1);
+        editor_key(0, 79, 1);
+        open_menu(EDIT_MENU);
+        set_hot(EI_COPY);
+    } else if (scene == 16) { /* typing, the clipboard, finding and Save as (tools/dostest.sh) */
+        FILE *out;
+        const char *s;
+
+        new_text_file();
+        for (s = "one two three\rfour"; *s; s++)
+            editor_key(*s == '\r' ? 13 : *s, 0, 0);
+        run(CMD_SELECT_ALL);
+        run(CMD_COPY_TEXT);
+        editor_key(0, 117, 0);  /* Ctrl+End */
+        editor_key(13, 0, 0);
+        run(CMD_PASTE);         /* one two three / four / one two three / four */
+        strcpy(find_text, "TWO");
+        editor_key(0, 119, 0);  /* Ctrl+Home, then find twice: the second "two" */
+        run(CMD_FIND_NEXT);
+        run(CMD_FIND_NEXT);
+        editor_key('2', 0, 0);  /* typing replaces it: one 2 three */
+        editor_key(0, 71, 1);   /* Shift+Home selects "one 2", which is cut */
+        run(CMD_CUT);
+        editor_key(0, 119, 0);
+        run(CMD_PASTE);         /* and pasted at the top */
+        strcpy(find_text, "nowhere");
+        run(CMD_FIND_NEXT);     /* not found: an alert */
+        close_alert(0);
+        out = fopen("C:\\OUT\\EDITOPS.TXT", "w");
+        if (out != NULL) {
+            fprintf(out, "%s %u %d\n", E.name, E.lines, E.modified);
+            if (edit_save_as("C:\\OUT\\NEW.TXT") == EDIT_OK)
+                after_save();
+            fprintf(out, "%s %d\n", E.name, E.modified);
+            enter_dir(1, "OUT");      /* CONFIG.SYS opens in the editor */
+            select_row(1, find_row(1, "CONFIG.SYS"));
+            open_row(1);
+            fprintf(out, "%s %d\n", E.name, front_window() == EDIT_WIN);
+            fclose(out);
+        }
     } else if (scene == 9) { /* System > About */
         run(CMD_ABOUT);
     } else if (scene == 3) {
@@ -2614,10 +2983,12 @@ int main(int argc, char **argv)
             set_hot(menu_item_at(A.open_menu, x, y));
         }
         prev = b;
-        if (kbhit()) {
-            ch = getch();
+        if (kb_hit()) {
+            int ext;
+
+            ch = kb_read(&ext);
             last_input = ticks();
-            on_key(ch);
+            on_key(ch, ext);
         }
         if (ticks() >= next_clock) {
             next_clock = ticks() + 18;

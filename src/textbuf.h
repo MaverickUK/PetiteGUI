@@ -46,5 +46,22 @@ unsigned tb_prev_line(const TextBuf *t, unsigned start);
 /* Lines in the text (1 for empty text), and the line pos is on (from 0). */
 unsigned tb_lines(const TextBuf *t);
 unsigned tb_line_of(const TextBuf *t, unsigned pos);
+/* The line breaks in [from, to). */
+unsigned tb_count_lines(const TextBuf *t, unsigned from, unsigned to);
+
+/* Room for this many more characters. */
+unsigned tb_room(const TextBuf *t);
+/* Delete n characters from pos; zero (and nothing deleted) if they aren't all there. */
+int tb_delete_range(TextBuf *t, unsigned pos, unsigned n);
+/* Insert n characters from src (which mustn't be in t's own block) at pos; zero (and
+ * nothing inserted) if they won't all fit. */
+int tb_insert_n(TextBuf *t, unsigned pos, const char TB_FAR *src, unsigned n);
+/* Copy the n characters from pos to dst. */
+void tb_copy_out(const TextBuf *t, unsigned pos, unsigned n, char TB_FAR *dst);
+
+#define TB_NONE ((unsigned)-1)
+/* The first place at or after from where the n characters of s are, ignoring the case of
+ * A-Z; TB_NONE if there's none (or n is 0). */
+unsigned tb_find(const TextBuf *t, unsigned from, const char *s, unsigned n);
 
 #endif

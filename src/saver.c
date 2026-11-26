@@ -2,6 +2,7 @@
 #include <i86.h>
 #include <stdlib.h>
 #include <string.h>
+#include "keyboard.h"
 #include "mouse.h"
 #include "saver.h"
 #include "saver_int.h"
@@ -143,10 +144,10 @@ void sv_nothing(void)
 static int woken(void)
 {
     union REGS r;
+    int ext;
 
-    if (kbhit()) {
-        if (getch() == 0)
-            getch();
+    if (kb_hit()) {
+        kb_read(&ext);
         return 1;
     }
     if (!mouse_present())

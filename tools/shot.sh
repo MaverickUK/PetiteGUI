@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Screenshots of every scene in both looks, through DOSBox-X with no window:
-# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6,8,12,14}.png.
+# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6,8,12,14,15}.png.
 # Scene 3 opens the games list, scanning the fixture games in tests/dos/GAMES.
 #
-#   tools/shot.sh            all eighteen
+#   tools/shot.sh            all twenty
 #   tools/shot.sh paper 1    one
 #   tools/shot.sh savers     each screensaver in both looks, a few seconds in:
 #                            build/shots/saver-NAME-{paper,ink}.png (Colour cycle's palette turns
 #                            don't show: a dump is video memory, not the colours on the screen)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# DOSBox-X and Python on Windows want Windows paths; elsewhere a path is a path.
+hostpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+# python3, or on Windows (where python3 is often only a Store shortcut) python
+PYTHON=${PYTHON:-$(python3 -c "" 2>/dev/null && echo python3 || echo python)}
 
 DOSBOX=${DOSBOX:-dosbox-x}
 OUT=build/shots
@@ -45,15 +49,15 @@ quit warning=false
 [cpu]
 cycles=max
 [autoexec]
-mount c "$work"
-mount d "$work/D"
-mount e "$work/CD" -t cdrom
+mount c "$(hostpath "$work")"
+mount d "$(hostpath "$work/D")"
+mount e "$(hostpath "$work/CD")" -t cdrom
 c:
 PETITE /LIST > NUL
 PETITE $flag $args /DUMP=$name.BIN
 exit
 EOF
-    "$DOSBOX" -silent -nogui -nomenu -conf "$work/shot.conf" > "$work/log.txt" 2>&1 &
+    "$DOSBOX" -silent -nogui -nomenu -conf "$(hostpath "$work/shot.conf")" > "$work/log.txt" 2>&1 &
     local pid=$! i
     for i in $(seq 1 60); do
         kill -0 "$pid" 2>/dev/null || break
@@ -64,7 +68,7 @@ EOF
         echo "no dump for $look $scene; DOSBox-X log in $work/log.txt" >&2
         exit 1
     fi
-    python3 tools/dump2png.py "$work/$name.BIN" "$out"
+    "$PYTHON" tools/dump2png.py "$(hostpath "$work/$name.BIN")" "$out"
     rm -rf "$work"
     echo "$out"
 }
@@ -79,7 +83,7 @@ elif [ $# -eq 2 ]; then
     shoot "$1" "$2"
 else
     for look in paper ink; do
-        for scene in 0 1 2 3 5 6 8 12 14; do
+        for scene in 0 1 2 3 5 6 8 12 14 15; do
             shoot $look $scene
         done
     done

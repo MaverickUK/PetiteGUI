@@ -128,10 +128,75 @@ unsigned tb_lines(const TextBuf *t)
 
 unsigned tb_line_of(const TextBuf *t, unsigned pos)
 {
+    return tb_count_lines(t, 0, pos);
+}
+
+unsigned tb_count_lines(const TextBuf *t, unsigned from, unsigned to)
+{
     unsigned i, n = 0;
 
-    for (i = 0; i < pos; i++)
+    for (i = from; i < to; i++)
         if (tb_at(t, i) == '\n')
             n++;
     return n;
+}
+
+unsigned tb_room(const TextBuf *t)
+{
+    return t->ge - t->gs;
+}
+
+int tb_delete_range(TextBuf *t, unsigned pos, unsigned n)
+{
+    if (pos > tb_len(t) || n > tb_len(t) - pos)
+        return 0;
+    move_gap(t, pos);
+    t->ge += n; /* the deleted text joins the gap */
+    return 1;
+}
+
+int tb_insert_n(TextBuf *t, unsigned pos, const char TB_FAR *src, unsigned n)
+{
+    if (n > tb_room(t) || pos > tb_len(t))
+        return 0;
+    move_gap(t, pos);
+    TB_MOVE(t->buf + t->gs, src, n);
+    t->gs += n;
+    return 1;
+}
+
+void tb_copy_out(const TextBuf *t, unsigned pos, unsigned n, char TB_FAR *dst)
+{
+    unsigned before = 0;
+
+    if (pos < t->gs) { /* the part before the gap, then the part after it */
+        before = t->gs - pos < n ? t->gs - pos : n;
+        TB_MOVE(dst, t->buf + pos, before);
+    }
+    if (n > before)
+        TB_MOVE(dst + before, t->buf + pos + before + (t->ge - t->gs), n - before);
+}
+
+static char upper(char c)
+{
+    return c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
+}
+
+unsigned tb_find(const TextBuf *t, unsigned from, const char *s, unsigned n)
+{
+    unsigned len = tb_len(t), i, k;
+    char first;
+
+    if (n == 0 || n > len)
+        return TB_NONE;
+    first = upper(s[0]);
+    for (i = from; i <= len - n; i++) {
+        if (upper(tb_at(t, i)) != first)
+            continue;
+        for (k = 1; k < n && upper(tb_at(t, i + k)) == upper(s[k]); k++)
+            ;
+        if (k == n)
+            return i;
+    }
+    return TB_NONE;
 }

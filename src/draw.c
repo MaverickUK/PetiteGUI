@@ -542,12 +542,26 @@ static void row_text(const Win *w, int k, char *name, char *right, int *kind)
     *kind = w->rows[k].dir ? ROW_DIR : ROW_FILE;
 }
 
+/* Characters from..to-1 of a row's text (n long), at their columns. */
+static void text_span(int x0, int y, const char *text, int n, int from, int to, uint8_t c)
+{
+    char part[100];
+
+    if (to > n)
+        to = n;
+    if (from >= to)
+        return;
+    memcpy(part, text + from, (size_t)(to - from));
+    part[to - from] = '\0';
+    gfx_text(x0 + from * 8, y, part, c, 0);
+}
+
 /* The editor's window below its title bar: where the caret is, the text, the caret. */
 static void draw_editor(const Win *w, const WinParts *p, int active)
 {
     char buf[40], text[100];
     int row, col, cr, cc, ry, x0 = p->list.x + 4;
-    unsigned len = tb_len(&E.t);
+    unsigned len = tb_len(&E.t), sel_start, sel_end;
     Rect old_clip, list;
     Win view = *w;
 
@@ -570,13 +584,26 @@ static void draw_editor(const Win *w, const WinParts *p, int active)
         return;
     gfx_set_clip(&list);
     for (row = 0; row < E.rows; row++) {
+        int c0, c1, n;
+
         ry = p->list.y + 2 + row * ROW_H;
         if (ry >= list.y + list.h || ry + ROW_H <= list.y)
             continue;
-        if (edit_row_text(row, text) < 0)
+        n = edit_row_text(row, text);
+        if (n < 0)
             break;
-        gfx_text(x0, ry, text, T->text, 0);
+        if (!edit_row_selection(row, &c0, &c1)) {
+            gfx_text(x0, ry, text, T->text, 0);
+            continue;
+        }
+        /* before the selection, the selection inverted, after it: each drawn once */
+        gfx_fill(x0 + c0 * 8, ry - 1, (c1 - c0) * 8, ROW_H, T->sel);
+        text_span(x0, ry, text, n, 0, c0, T->text);
+        text_span(x0, ry, text, n, c0, c1, T->sel_text);
+        text_span(x0, ry, text, n, c1, n, T->text);
     }
+    if (edit_selection(&sel_start, &sel_end)) /* a selection shows instead of the caret */
+        active = 0;
     if (edit_caret(&cr, &cc) && active) { /* the character under the caret, inverted */
         ry = p->list.y + 2 + cr * ROW_H;
         edit_row_text(cr, text);

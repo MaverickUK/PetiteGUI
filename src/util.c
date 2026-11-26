@@ -55,6 +55,17 @@ const char *path_ext(const char *name)
     return dot != NULL && dot != name ? dot + 1 : name + strlen(name);
 }
 
+int stricmp_ascii(const char *a, const char *b)
+{
+    int ca, cb;
+
+    do {
+        ca = toupper((unsigned char)*a++);
+        cb = toupper((unsigned char)*b++);
+    } while (ca == cb && ca != 0);
+    return ca - cb;
+}
+
 static int ext_in(const char *name, const char *const *exts, int n)
 {
     const char *e = path_ext(name);
@@ -72,8 +83,13 @@ static int ext_in(const char *name, const char *const *exts, int n)
 int path_is_text(const char *name)
 {
     static const char *const exts[] = { "TXT", "INI", "CFG" };
+    const char *slash = strrchr(name, '\\');
 
-    return ext_in(name, exts, 3);
+    if (slash != NULL)
+        name = slash + 1;
+    /* DOS's own two: a batch file and a .SYS, but text to edit, not to run */
+    return ext_in(name, exts, 3) || stricmp_ascii(name, "AUTOEXEC.BAT") == 0 ||
+           stricmp_ascii(name, "CONFIG.SYS") == 0;
 }
 
 int path_is_program(const char *name)

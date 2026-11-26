@@ -7,12 +7,17 @@
 # from DOS first, then from PetiteGUI: with PetiteGUI swapped out it should get nearly as much.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-make -s build/PETITE.EXE
+# DOSBox-X and Python on Windows want Windows paths; elsewhere a path is a path.
+hostpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+# python3, or on Windows (where python3 is often only a Store shortcut) python
+PYTHON=${PYTHON:-$(python3 -c "" 2>/dev/null && echo python3 || echo python)}
+${MAKE:-make} -s build/PETITE.EXE
 
 WATCOM=${WATCOM:-$HOME/opt/openwatcom}
 case "$(uname -s)/$(uname -m)" in
     Darwin/arm64) OWBIN=$WATCOM/armo64 ;;
     Darwin/*) OWBIN=$WATCOM/bino64 ;;
+    MINGW*/*|MSYS*/*|CYGWIN*/*) OWBIN=$WATCOM/binnt64 ;;
     *) OWBIN=$WATCOM/binl64 ;;
 esac
 
@@ -24,6 +29,7 @@ cp build/PETITE.EXE "$work/PETITE/"
 cp build/PETITE.EXE "$work/GUI/"
 printf 'scanpath:C:\\GAMES\\MEMTEST\n' > "$work/GUI/PETITE.CFG"
 printf 'one\r\ntwo\r\n' > "$work/OUT/EDIT.TXT"
+printf 'FILES=30\r\n' > "$work/OUT/CONFIG.SYS"
 mkdir -p "$work/SET"
 cp build/PETITE.EXE "$work/SET/"
 printf '; my settings\nscanpath:C:\\GAMES\nSaver: clock\n; the end\n' > "$work/SET/PETITE.CFG"
@@ -44,9 +50,9 @@ cycles=max
 [dos]
 ems=true
 [autoexec]
-mount c "$work"
-mount d "$work/DDRIVE"
-mount e "$work/CD" -t cdrom
+mount c "$(hostpath "$work")"
+mount d "$(hostpath "$work/DDRIVE")"
+mount e "$(hostpath "$work/CD")" -t cdrom
 c:
 cd \\PETITE
 C:\\GAMES\\MEMTEST\\FREEMEM.EXE C:\\OUT\\BASE.TXT direct
@@ -65,6 +71,7 @@ PETITE /EGA /SHOT=11 /DUMP=C:\\OUT\\OPENBAT.BIN > C:\\OUT\\OPENBATO.TXT
 PETITE /DRIVES > C:\\OUT\\DRIVES.TXT
 PETITE /EGA /SHOT=13 /DUMP=C:\\OUT\\FILEOPS.BIN > C:\\OUT\\FILEOPSO.TXT
 PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
+PETITE /CGA /SHOT=16 /DUMP=C:\\OUT\\EDITOPS.BIN > C:\\OUT\\EDITOPSO.TXT
 PETITE /CGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\CCYCLE.BIN
 PETITE /EGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\ECYCLE.BIN
 PETITE /CGA /SAVER=blank /STEPS=60 /DUMP=C:\\OUT\\CBLANK.BIN
@@ -89,7 +96,7 @@ PETITE /SET=saverdelay:15
 dir /a C:\\PETITE > C:\\OUT\\DIR.TXT
 exit
 EOF
-dosbox-x -silent -nogui -nomenu -conf "$work/test.conf" > "$work/log.txt" 2>&1 &
+"${DOSBOX:-dosbox-x}" -silent -nogui -nomenu -conf "$(hostpath "$work/test.conf")" > "$work/log.txt" 2>&1 &
 pid=$!
 for _ in $(seq 1 120); do
     kill -0 "$pid" 2>/dev/null || break
@@ -97,8 +104,8 @@ for _ in $(seq 1 120); do
 done
 kill "$pid" 2>/dev/null || true
 
-python3 - "$work" <<'EOF'
-import os, re, sys
+"$PYTHON" - "$(hostpath "$work")" <<'EOF'
+import os, re, subprocess, sys
 w = sys.argv[1]
 fails = []
 
@@ -149,11 +156,17 @@ check(os.path.getsize(os.path.join(w, "OUT", "BACK.BIN")) == 16384 if os.path.ex
       "back on the desktop afterwards (the screen was dumped)")
 if os.path.exists(os.path.join(w, "OUT", "BACK.BIN")):
     os.makedirs("build/shots", exist_ok=True)
-    os.system("python3 tools/dump2png.py '%s' build/shots/back.png" % os.path.join(w, "OUT", "BACK.BIN"))
+    subprocess.call([sys.executable, "tools/dump2png.py", os.path.join(w, "OUT", "BACK.BIN"), "build/shots/back.png"])
     print("     the desktop after the game: build/shots/back.png")
 edited = open(os.path.join(w, "OUT", "EDIT.TXT"), "rb").read()
 check(edited == b"Hi\r\none\r\ntwo\r\n!", "the editor saved a typed line and kept CR LF: %r" % edited)
 check(not os.path.exists(os.path.join(w, "OUT", "PETITE.$$$")), "no temporary file left from saving")
+ops = read("OUT", "EDITOPS.TXT").replace("\r", "").split("\n")
+check(ops[:1] == ["Untitled 4 1"], "a new file typed in, copied, pasted, found, cut and pasted: %r" % ops[:1])
+new = open(os.path.join(w, "OUT", "NEW.TXT"), "rb").read() if os.path.exists(os.path.join(w, "OUT", "NEW.TXT")) else b""
+check(new == b"one 2one two three\r\nfour\r\n three\r\nfour", "and saved as NEW.TXT, with CR LF: %r" % new)
+check(ops[1:2] == ["NEW.TXT 0"], "Save as took the new name, nothing left unsaved: %r" % ops[1:2])
+check(ops[2:3] == ["CONFIG.SYS 1"], "CONFIG.SYS opened in the editor from a folder: %r" % ops[2:3])
 for k in ["cycle", "blank", "stars", "lines", "maze", "melt", "life", "games", "clock"]:
     for look, size in (("C", 16384), ("E", 64000)):
         p = os.path.join(w, "OUT", look + k.upper()[:7] + ".BIN")

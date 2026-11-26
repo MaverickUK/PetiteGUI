@@ -2,6 +2,25 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.0] - 2026-11-26
+
+Editing common files: the third step of the [roadmap](ROADMAP.md).
+
+### Added
+
+- **Selecting text** in the editor: Shift with the arrows, Home, End, Page Up and Page Down, Ctrl+Home and Ctrl+End; dragging with the mouse (past the top or bottom, it scrolls); Shift-click to extend; Edit › Select all (Ctrl+A). Typing, Delete or Backspace replaces what's selected.
+- **Cut, copy and paste** (Ctrl+X, Ctrl+C, Ctrl+V), in a new **Edit** menu and on a right-click in the editor. The clipboard is a DOS memory block of its own, kept when the file is closed or another opened (it's let go when a program runs).
+- **Find** (Ctrl+F) and **Find next** (F3): ignoring case, from the caret, going round to the top.
+- **File › New text file** (Ctrl+N): an Untitled file, whose first save asks where it goes; **File › Save as…** saves anywhere, asking before replacing a file. A bare name goes in the front folder.
+- **AUTOEXEC.BAT and CONFIG.SYS** open in the editor on a double-click (Run… still runs AUTOEXEC.BAT).
+- `/SHOT=15` (a selection and the Edit menu) and `/SHOT=16` (new file, clipboard, Find and Save as, checked by `tools/dostest.sh`); host tests for the text buffer's ranges and finding.
+- The tools (`make`, `make test`, `make shots`, `make dostest`, `tools/run.sh`) work on Windows too, in Git Bash with `mingw32-make`, Open Watcom's `binnt64` and DOSBox-X.
+
+### Changed
+
+- Keys are read through the BIOS (`INT 16h`), not DOS, which would end the program on a Ctrl+C.
+- The editor redraws only the lines a selection covered or covers, as well as the caret's.
+
 ## [0.8.1] - 2026-11-26
 
 ### Changed
@@ -151,6 +170,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.9.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.9.0
 [0.8.1]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.1
 [0.8.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.0
 [0.7.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.7.0

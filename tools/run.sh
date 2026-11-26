@@ -11,6 +11,8 @@
 # and a 286's for Ink; CYCLES=max runs it flat out.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# DOSBox-X and Python on Windows want Windows paths; elsewhere a path is a path.
+hostpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 
 look=${1:-paper}
 case $look in
@@ -18,11 +20,12 @@ case $look in
     ink) machine=ega; cycles="fixed 3000"; cpu=286 ;;
     *) echo "usage: tools/run.sh [paper|ink]" >&2; exit 1 ;;
 esac
-[ -f build/PETITE.EXE ] || make
+[ -f build/PETITE.EXE ] || ${MAKE:-make}
 WATCOM=${WATCOM:-$HOME/opt/openwatcom}
 case "$(uname -s)/$(uname -m)" in
     Darwin/arm64) OWBIN=$WATCOM/armo64 ;;
     Darwin/*) OWBIN=$WATCOM/bino64 ;;
+    MINGW*/*|MSYS*/*|CYGWIN*/*) OWBIN=$WATCOM/binnt64 ;;
     *) OWBIN=$WATCOM/binl64 ;;
 esac
 work=$(mktemp -d)
@@ -48,10 +51,10 @@ aspect=true
 [dos]
 ems=true
 [autoexec]
-mount c "$work"
-mount d "$work/D"
-mount e "$work/CD" -t cdrom
+mount c "$(hostpath "$work")"
+mount d "$(hostpath "$work/D")"
+mount e "$(hostpath "$work/CD")" -t cdrom
 c:
 PETITE
 EOF
-exec "${DOSBOX:-dosbox-x}" -conf "$work/run.conf"
+exec "${DOSBOX:-dosbox-x}" -conf "$(hostpath "$work/run.conf")"

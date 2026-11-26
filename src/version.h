@@ -2,6 +2,6 @@
 #define VERSION_H
 
 /* SemVer: bump it with every change, with an entry in CHANGELOG.md. */
-#define PETITE_VERSION "0.8.1"
+#define PETITE_VERSION "0.9.0"
 
 #endif

@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-CC=${CC:-cc}
+CC=${CC:-$(command -v cc >/dev/null 2>&1 && echo cc || echo gcc)}
 FLAGS="-std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -g" # sprintf: the DOS code is C89
 if $CC -fsanitize=address,undefined -x c -o /dev/null - <<<'int main(void){return 0;}' 2>/dev/null; then
     FLAGS="$FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer"

@@ -13,6 +13,9 @@ UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_S),Darwin)
   OWBIN ?= $(WATCOM)/$(if $(filter arm64,$(UNAME_M)),armo64,bino64)
+else ifeq ($(OS),Windows_NT)
+  # Windows (Git Bash and mingw32-make): HOME may come with backslashes, which sh would eat
+  OWBIN ?= $(subst \,/,$(WATCOM))/binnt64
 else
   OWBIN ?= $(WATCOM)/$(if $(filter aarch64 arm64,$(UNAME_M)),arml64,binl64)
 endif
@@ -25,7 +28,7 @@ export INCLUDE := $(WATCOM)/h
 # warnings; -zq: quiet.
 CFLAGS = -bt=dos -mm -0 -ox -w4 -zq
 
-SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c saverlib.c saver.c savers_fx.c savers_grid.c savers_info.c gamecols.c field.c drives.c fileops.c
+SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c keyboard.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c saverlib.c saver.c savers_fx.c savers_grid.c savers_info.c gamecols.c field.c drives.c fileops.c
 # swapcore must come first: it has to be the first code in memory, so that everything after
 # it can be swapped out while a game runs (see src/swapcore.asm).
 OBJ = build/swapcore.obj $(patsubst %.c,build/%.obj,$(SRC))

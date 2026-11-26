@@ -23,7 +23,7 @@
 #define DIR_WINS 4     /* folder windows: 0 to 3 */
 #define NUM_WINS 6
 #define MAX_ICONS 27   /* a drive each, and the games */
-#define NUM_MENUS 6    /* on the menu bar */
+#define NUM_MENUS 7    /* on the menu bar */
 #define CONTEXT_MENU NUM_MENUS /* the right-click menu, after them */
 #define GAMES_WIN 4    /* the games list's window */
 #define EDIT_WIN 5     /* the text editor's */

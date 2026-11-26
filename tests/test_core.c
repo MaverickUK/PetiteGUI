@@ -203,6 +203,9 @@ static void test_paths(void)
 
     CHECK(path_is_text("README.TXT") && path_is_text("setup.ini") && path_is_text("A.Cfg"));
     CHECK(!path_is_text("GAME.EXE") && !path_is_text("TXT") && !path_is_text("X.TXTX") && !path_is_text("X.TX"));
+    CHECK(path_is_text("AUTOEXEC.BAT") && path_is_text("config.sys") && path_is_text("C:\\CONFIG.SYS"));
+    CHECK(!path_is_text("AUTOEXEC.BA") && !path_is_text("GO.BAT") && !path_is_text("HIMEM.SYS"));
+    CHECK(path_is_program("AUTOEXEC.BAT")); /* Run... still runs it */
     CHECK(strcmp(path_ext("A.B.C"), "C") == 0 && strcmp(path_ext("NOEXT"), "") == 0);
     CHECK(path_is_program("DOOM.EXE") && path_is_program("go.bat") && path_is_program("Command.Com"));
 
@@ -272,6 +275,59 @@ static void test_textbuf(void)
     memcpy(mem, "a\nb", 3);
     tb_load(&t, mem, 3, &crlf);
     CHECK(!crlf && tb_lines(&t) == 2);
+}
+
+/* Ranges, for selections and the clipboard, and finding. */
+static void test_textbuf_ranges(void)
+{
+    char mem[32], out[40], clip[40];
+    TextBuf t;
+    int crlf;
+    unsigned i;
+
+    tb_init(&t, mem, sizeof mem);
+    memcpy(mem, "Hello\nwide\nworld", 16);
+    tb_load(&t, mem, 16, &crlf);
+    CHECK(tb_count_lines(&t, 0, 16) == 2 && tb_count_lines(&t, 6, 11) == 1 && tb_count_lines(&t, 7, 7) == 0);
+    CHECK(tb_room(&t) == sizeof mem - 16);
+
+    /* copy out across the gap, wherever it is */
+    tb_insert(&t, 8, '-');                    /* the gap now sits after "Hello\nwi-" */
+    tb_copy_out(&t, 3, 10, clip);
+    clip[10] = '\0';
+    CHECK(strcmp(clip, "lo\nwi-de\nw") == 0);
+    tb_copy_out(&t, 10, 4, clip);             /* all after the gap */
+    clip[4] = '\0';
+    CHECK(strcmp(clip, "e\nwo") == 0);
+    tb_copy_out(&t, 0, 3, clip);              /* all before it */
+    clip[3] = '\0';
+    CHECK(strcmp(clip, "Hel") == 0);
+
+    /* delete a range, insert a block */
+    CHECK(tb_delete_range(&t, 5, 6));         /* "\nwi-de" */
+    tb_str(&t, out);
+    CHECK(strcmp(out, "Hello\nworld") == 0);
+    CHECK(!tb_delete_range(&t, 8, 4));        /* past the end: nothing goes */
+    CHECK(tb_len(&t) == 11);
+    CHECK(tb_delete_range(&t, 11, 0));        /* nothing, at the end, is fine */
+    CHECK(tb_insert_n(&t, 0, "Oh, ", 4));
+    tb_str(&t, out);
+    CHECK(strcmp(out, "Oh, Hello\nworld") == 0);
+    CHECK(!tb_insert_n(&t, 3, "0123456789012345678901234567890", 31)); /* too big: none of it */
+    CHECK(tb_len(&t) == 15);
+    CHECK(!tb_insert_n(&t, 16, "x", 1));      /* past the end */
+
+    /* finding, ignoring case */
+    CHECK(tb_find(&t, 0, "hello", 5) == 4);
+    CHECK(tb_find(&t, 5, "hello", 5) == TB_NONE);
+    CHECK(tb_find(&t, 0, "O\nW", 3) == 8);
+    CHECK(tb_find(&t, 0, "WORLD", 5) == 10);  /* right at the end */
+    CHECK(tb_find(&t, 11, "WORLD", 5) == TB_NONE);
+    CHECK(tb_find(&t, 0, "", 0) == TB_NONE);
+    CHECK(tb_find(&t, 0, "worlds", 6) == TB_NONE);
+    for (i = 0; i < 17; i++)
+        tb_insert(&t, 0, 'x');                /* fill it: a find still works */
+    CHECK(tb_room(&t) == 0 && tb_find(&t, 0, "world", 5) == 27);
 }
 
 static void test_sin(void)
@@ -457,6 +513,7 @@ int main(void)
     test_gm_time();
     test_paths();
     test_textbuf();
+    test_textbuf_ranges();
     test_sin();
     test_rand();
     test_life();

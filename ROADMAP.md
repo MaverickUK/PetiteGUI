@@ -17,12 +17,12 @@ Each step is a minor version. The numbers are the items' order in the original l
 - [x] **5. Rename, New folder, and deleting folders.** Deleting a folder that isn't empty says how much it holds first ("Delete GAMES and its 214 files?").
 - [x] **6. Copy and move,** from File › Copy… and Move…, or by dragging a file to another folder window or a drive icon. A move within a drive is a DOS rename, so it's instant; across drives it's a copy, then a delete, with progress shown.
 
-## 0.9: edit common files
+## 0.9: edit common files (done in 0.9.0)
 
-- [ ] **10. New file, and Save as.**
-- [ ] **11. Find, and Find next** (Ctrl+F, F3).
-- [ ] **12. Selecting text, and cut, copy and paste** (Shift+arrows; Ctrl+X, Ctrl+C, Ctrl+V), with the clipboard in a DOS block of its own.
-- [ ] **13. AUTOEXEC.BAT and CONFIG.SYS** open in the editor on a double-click, rather than running or showing their size.
+- [x] **10. New file, and Save as.** File › New text file (Ctrl+N) starts an Untitled one; its first save, or Save as…, asks where.
+- [x] **11. Find, and Find next** (Ctrl+F, F3), ignoring case, going round to the top.
+- [x] **12. Selecting text, and cut, copy and paste** (Shift+arrows; Ctrl+X, Ctrl+C, Ctrl+V), with the clipboard in a DOS block of its own.
+- [x] **13. AUTOEXEC.BAT and CONFIG.SYS** open in the editor on a double-click, rather than running or showing their size.
 
 ## 0.10: details
 

@@ -118,6 +118,10 @@ One file at a time, up to 60,000 bytes, in a DOS memory block with 16 KB to grow
 
 The editor keeps its caret and view as character positions and line numbers, updated as it goes rather than counted from the start of the file at each key. A key redraws only the caret's old and new rows, unless the view scrolled or a line was added or removed.
 
+The selection runs between an anchor and the caret (with nothing selected, they're the same place), each kept with its line number. Shift with a key that moves the caret leaves the anchor where it was; any other key brings it to the caret. Typing, Delete or Backspace with a selection removes it first, as one block move of the gap. The clipboard is a DOS block of its own, the size of what was copied, so it outlives the file it came from; it's freed before a program runs (nothing of PetiteGUI's may stay allocated under one). Find scans forward from the caret, ignoring case, then from the top.
+
+Keys come from the BIOS (`INT 16h`) rather than DOS: DOS's console calls check for Ctrl+C and would end the program on one, and the editor wants Ctrl+C for Copy. On an XT keyboard, with no separate arrow keys, Shift turns the keypad's arrows into digits; `keyboard.c` takes them as arrows when Shift is down, so Shift+arrow selects there too.
+
 Saving writes `PETITE.$$$` beside the file, then replaces the file with it, so a full disk leaves the file as it was. Before a game runs, the editor's text is freed (with any changes saved first: it won't run a game until they are) and read back after, at the same place.
 
 ## Screensavers
@@ -160,5 +164,5 @@ The scan walks every directory under each `ScanPath` entry. `PETITE.IDX` records
 - Speed on a real 8088: the inner loops (fills, text, spans) into NASM, after measuring.
 - More of GameMinder: sorting and filtering the games list, a game's details and play stats, adding and editing `!GM_INFO.TXT`.
 - Resizing windows; more than one directory window per drive; copying, moving and new folders; deleting folders.
-- The editor: selecting text, cut and paste, find, horizontal scrolling with the mouse.
+- The editor: horizontal scrolling with the mouse, undo.
 - Arcade (CGA 320×200, 4 colours) and Bevel (EGA 640×350) as further drivers: see [style-studies.html](style-studies.html).
