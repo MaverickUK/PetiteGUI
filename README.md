@@ -9,27 +9,25 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-blue" alt="Licence: GPL-3.0"></a>
 </p>
 
-A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the mouse, for any 8088 or later. It lists your games from [GameMinder](https://github.com/MaverickUK/GameMinder)'s metadata and runs them with itself swapped out of memory.
+A small mouse based desktop for CGA and EGA PCs designed for simple file management tasks (Copy, move, rename, delete, edit text, run) along with integrate games listing support from [GameMinder](https://github.com/MaverickUK/GameMinder)
 
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
 **Status:** 0.8.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
-## Two looks, one desktop
+## CGA, EGA and VGA support
 
 | Look | Mode | Colours | Runs on |
 |---|---|---|---|
 | **Paper** | CGA 06h, 640×200 | Black and white, with dithered greys | Any CGA, EGA or VGA |
 | **Ink** | EGA 0Eh, 640×200 | 16 | Any EGA (64 KB is enough) or VGA |
 
-Both share the layout, the widgets and the 8×8 BIOS font; only the colour table and the video driver differ. On an EGA or VGA it starts in Ink, and **Options** switches between the two.
-
 ## What it does
 
-- **A menu bar** with drop-down menus: click, or press and drag. Check marks, disabled items and keyboard shortcuts.
+- **A menu bar** with drop-down menus: click or press and drag. Check marks, disabled items and keyboard shortcuts.
 - **Windows** that move (drag the title bar), resize (drag the size box in the bottom-right corner), zoom to fill the screen (double-click the title bar), come to the front, close (the box at the left) and scroll (the arrows, or the track).
-- **Your drives and folders:** an icon for each drive (floppy, hard disk, CD-ROM, network); double-click one for a window on it, a folder to go into it, and `..` to come back up.
+- **Drives and folders:** an icon for each drive (floppy, hard disk, CD-ROM); double-click one for a window on it, a folder to go into it, and `..` to come back up.
 - **Running software:** double-click a program to run it, **File › Run…** for a command line, or **File › DOS prompt**; PetiteGUI swaps itself out of memory while anything runs, leaving about 2 KB.
 - **A text editor** for TXT, INI and CFG files (double-click one), or any file with **Open as text**. It saves with Ctrl+S and asks before throwing changes away.
 - **Right-click menus** on files (Open, Open as text, Run, Info, Rename, Copy, Move, Delete) and games (Run, Run setup, Game info).
@@ -40,7 +38,7 @@ Both share the layout, the widgets and the 8×8 BIOS font; only the colour table
 
 ## Games, with GameMinder
 
-PetiteGUI reads the `!GM_INFO.TXT` file [GameMinder](https://github.com/MaverickUK/GameMinder) keeps in each game's directory, and runs games the way GameMinder does.
+PetiteGUI reads the `!GM_INFO.TXT` file [GameMinder](https://github.com/MaverickUK/GameMinder) keeps in each game's directory and runs games the way GameMinder does.
 
 - **The Games window** (the joystick icon, or Games › Show games, Ctrl+G) lists every game found under `ScanPath`. Pick its columns in the Games menu: year, genre, developer, type, video, sound, memory needed, times played, last played and time played. Click a heading to sort by it. The first time it opens it scans for `!GM_INFO.TXT` files and saves what it found in `PETITE.IDX`, so later opens are instant. **Games › Rescan** looks again.
 - **Run a game** with a double-click, Enter or Games › Run (Games › Run setup for its `setup:` program). It uses the game's `exec:`, `before:` and `after:`; batch files go through `COMMAND.COM`.
