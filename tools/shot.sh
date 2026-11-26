@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Screenshots of every scene in both looks, through DOSBox-X with no window:
-# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6,8}.png.
+# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6,8,12}.png.
 # Scene 3 opens the games list, scanning the fixture games in tests/dos/GAMES.
 #
-#   tools/shot.sh            all fourteen
+#   tools/shot.sh            all sixteen
 #   tools/shot.sh paper 1    one
 #   tools/shot.sh savers     each screensaver in both looks, a few seconds in:
 #                            build/shots/saver-NAME-{paper,ink}.png (Colour cycle's palette turns
@@ -33,6 +33,8 @@ shoot() { # look scene [saver steps]
     work=$(mktemp -d)
     cp build/PETITE.EXE "$work/"
     cp -R tests/dos/GAMES "$work/GAMES"
+    mkdir -p "$work/D" "$work/CD"
+    echo "a CD" > "$work/CD/README.TXT"
     printf 'scanpath:C:\\GAMES\ngamecolumns:year,genre,developer,plays,last,time\n' > "$work/PETITE.CFG"
     cat > "$work/shot.conf" <<EOF
 [sdl]
@@ -44,6 +46,8 @@ quit warning=false
 cycles=max
 [autoexec]
 mount c "$work"
+mount d "$work/D"
+mount e "$work/CD" -t cdrom
 c:
 PETITE /LIST > NUL
 PETITE $flag $args /DUMP=$name.BIN
@@ -75,7 +79,7 @@ elif [ $# -eq 2 ]; then
     shoot "$1" "$2"
 else
     for look in paper ink; do
-        for scene in 0 1 2 3 5 6 8; do
+        for scene in 0 1 2 3 5 6 8 12; do
             shoot $look $scene
         done
     done

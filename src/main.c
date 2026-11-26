@@ -14,7 +14,8 @@
  *                     draw scene n (0 desktop, 1 File menu open, 2 alert, 3 games list,
  *                     4 the first game run from the list and back, 5 the editor,
  *                     6 the right-click menu, 7 an edit saved, 8 windows resized and zoomed,
- *                     9 the About box),
+ *                     9 the About box, 10 a command run, 11 a batch file opened, 12 Run...),
+ *   PETITE /DRIVES    list the drives found, and quit
  *                     write video memory to FILE.BIN and quit: tools/shot.sh makes a PNG
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
@@ -26,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "app.h"
+#include "drives.h"
 #include "edit.h"
 #include "files.h"
 #include "gamecols.h"
@@ -45,7 +47,7 @@ enum {
     CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK,
     CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY,
     CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP,
-    CMD_SAVER_NOW
+    CMD_SAVER_NOW, CMD_RUN_DIALOG, CMD_DOS_PROMPT
 };
 #define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
 #define CMD_SAVER_DELAY 400 /* + minutes */
@@ -54,9 +56,15 @@ enum {
 static MenuItem system_items[] = {
     { "About PetiteGUI...", NULL, 0, CMD_ABOUT },
 };
+enum { /* file_items' places */
+    FI_OPEN, FI_OPEN_TEXT, FI_RUN, FI_PROMPT, FI_INFO, FI_SEP1, FI_NEW_FOLDER, FI_COPY, FI_DELETE,
+    FI_SEP2, FI_SAVE, FI_CLOSE, FI_QUIT
+};
 static MenuItem file_items[] = {
     { "Open", "Ctrl+O", 0, CMD_OPEN },
     { "Open as text", "Ctrl+E", 0, CMD_EDIT_FILE },
+    { "Run...", "Ctrl+R", 0, CMD_RUN_DIALOG },
+    { "DOS prompt", "Ctrl+D", 0, CMD_DOS_PROMPT },
     { "Info...", "Ctrl+I", 0, CMD_INFO },
     { "", NULL, MI_SEP, 0 },
     { "New folder", "Ctrl+N", MI_OFF, CMD_NEW_FOLDER },
@@ -68,9 +76,11 @@ static MenuItem file_items[] = {
     { "Quit", "Ctrl+Q", 0, CMD_QUIT },
 };
 /* The right-click menus: on a file, and on a game. */
+enum { FC_OPEN, FC_OPEN_TEXT, FC_RUN, FC_INFO, FC_SEP, FC_DELETE };
 static MenuItem file_context[] = {
     { "Open", "Enter", 0, CMD_OPEN },
     { "Open as text", "Ctrl+E", 0, CMD_EDIT_FILE },
+    { "Run...", "Ctrl+R", 0, CMD_RUN_DIALOG },
     { "Info...", "Ctrl+I", 0, CMD_INFO },
     { "", NULL, MI_SEP, 0 },
     { "Delete...", "Del", 0, CMD_DELETE },
@@ -130,11 +140,11 @@ static MenuItem options_items[] = {
 };
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #define FILE_MENU 1
-#define FILE_DELETE 6 /* its index in file_items */
+#define FILE_DELETE FI_DELETE
 
 /* ---- Setting up ---- */
 
-static Row rows_a[MAX_ROWS], rows_c[MAX_ROWS];
+static Row dir_rows[DIR_WINS][MAX_ROWS];
 
 /* Sort the directory windows, keeping each one's selected row selected. */
 static void sort_windows(void)
@@ -157,28 +167,73 @@ static void sort_windows(void)
     }
 }
 
+/* An icon for each drive, then the games, in columns from the right; the trash below. */
+static void layout_icons(void)
+{
+    Drive d[MAX_DRIVES];
+    int n = drives_find(d), i, k = 0, col = 0, row = 0;
+    Icon *ic;
+
+    for (i = 0; i < n && k < MAX_ICONS - 2; i++, k++) {
+        ic = &A.icon[k];
+        sprintf(ic->label, "%c:", d[i].letter);
+        ic->drive = d[i].letter;
+        ic->kind = d[i].kind == DRIVE_FLOPPY ? ICON_FLOPPY : d[i].kind == DRIVE_CDROM ? ICON_CDROM :
+                   d[i].kind == DRIVE_REMOTE ? ICON_NETWORK : ICON_DISK;
+    }
+    strcpy(A.icon[k].label, "Games");
+    A.icon[k].kind = ICON_GAMES;
+    A.icon[k++].drive = 0;
+    for (i = 0; i < k; i++) {
+        A.icon[i].x = SCREEN_W - 44 - col * 56;
+        A.icon[i].y = MENU_H + 12 + row * 36;
+        if (++row >= (col == 0 ? 3 : 4)) { /* the first column leaves room for the trash */
+            row = 0;
+            col++;
+        }
+    }
+    strcpy(A.icon[k].label, "Trash");
+    A.icon[k].kind = ICON_TRASH;
+    A.icon[k].drive = 0;
+    A.icon[k].x = SCREEN_W - 44;
+    A.icon[k].y = SCREEN_H - 42;
+    A.nicons = k + 1;
+    A.sel_icon = -1;
+}
+
+/* The first hard disk's letter (or the first drive's) */
+static char first_drive(void)
+{
+    int i;
+
+    for (i = 0; i < A.nicons; i++)
+        if (A.icon[i].kind == ICON_DISK)
+            return A.icon[i].drive;
+    return A.icon[0].drive ? A.icon[0].drive : 'C';
+}
+
 static void app_init(void)
 {
-    Win *a = &A.win[0], *c = &A.win[1], *g = &A.win[GAMES_WIN], *e = &A.win[EDIT_WIN];
+    Win *c = &A.win[1], *g = &A.win[GAMES_WIN], *e = &A.win[EDIT_WIN];
+    static const Rect dir_rects[DIR_WINS] = {
+        { 24, MENU_H + 14, 264, 100 }, { 176, MENU_H + 30, 336, 122 },
+        { 64, MENU_H + 46, 336, 122 }, { 104, MENU_H + 22, 336, 122 }
+    };
     static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Games", "Saver", "Options" };
     MenuItem *items[NUM_MENUS];
     int counts[NUM_MENUS], i, x = 16;
 
     memset(&A, 0, sizeof A);
-    /* A: starts closed, so a floppy drive isn't read until it's opened */
-    a->r = rect_make(24, MENU_H + 14, 264, 100);
-    strcpy(a->path, "A:\\");
-    a->title = a->path;
-    a->rows = rows_a;
-    a->cap = MAX_ROWS;
-    a->sel = -1;
-
-    c->r = rect_make(176, MENU_H + 30, 336, 122);
-    strcpy(c->path, "C:\\");
-    c->title = c->path;
-    c->rows = rows_c;
-    c->cap = MAX_ROWS;
-    c->sel = -1;
+    /* Four folder windows, closed until a drive is opened; the first hard disk's is open */
+    for (i = 0; i < DIR_WINS; i++) {
+        A.win[i].r = dir_rects[i];
+        A.win[i].title = A.win[i].path;
+        A.win[i].rows = dir_rows[i];
+        A.win[i].cap = MAX_ROWS;
+        A.win[i].sel = -1;
+    }
+    layout_icons();
+    sprintf(c->path, "%c:\\", first_drive());
     c->open = 1;
 
     g->kind = WIN_GAMES;
@@ -193,26 +248,11 @@ static void app_init(void)
 
     A.z[0] = EDIT_WIN; /* closed until they're opened, then in front */
     A.z[1] = GAMES_WIN;
-    A.z[2] = 0;
-    A.z[3] = 1;
+    A.z[2] = 3;
+    A.z[3] = 2;
+    A.z[4] = 0;
+    A.z[5] = 1;
 
-    A.icon[0].label = "A:";
-    A.icon[0].kind = ICON_FLOPPY;
-    A.icon[0].y = MENU_H + 12;
-    A.icon[0].win = 0;
-    A.icon[1].label = "C:";
-    A.icon[1].kind = ICON_DISK;
-    A.icon[1].y = MENU_H + 48;
-    A.icon[1].win = 1;
-    A.icon[2].label = "Games";
-    A.icon[2].kind = ICON_GAMES;
-    A.icon[2].y = MENU_H + 84;
-    A.icon[2].win = GAMES_WIN;
-    A.icon[3].label = "Trash";
-    A.icon[3].kind = ICON_TRASH;
-    A.icon[3].y = SCREEN_H - 42;
-    A.icon[3].win = -1;
-    A.sel_icon = 1;
 
     items[0] = system_items;
     counts[0] = COUNT(system_items);
@@ -249,10 +289,11 @@ static void update_menus(void)
     const Row *row = w != NULL && w->kind == WIN_FILES && w->sel >= 0 && w->sel < w->nrows ? &w->rows[w->sel] : NULL;
     int file = row != NULL && !row->dir, up = row != NULL && strcmp(row->name, "..") == 0;
 
-    file_items[1].flags = file_context[1].flags = (uint8_t)(file ? 0 : MI_OFF);
-    file_items[6].flags = file_context[4].flags = (uint8_t)(file || f == GAMES_WIN ? 0 : MI_OFF);
-    file_context[2].flags = (uint8_t)(up ? MI_OFF : 0);
-    file_items[8].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
+    file_items[FI_OPEN_TEXT].flags = file_context[FC_OPEN_TEXT].flags = (uint8_t)(file ? 0 : MI_OFF);
+    file_items[FI_DELETE].flags = file_context[FC_DELETE].flags = (uint8_t)(file || f == GAMES_WIN ? 0 : MI_OFF);
+    file_context[FC_INFO].flags = (uint8_t)(up ? MI_OFF : 0);
+    file_context[FC_RUN].flags = (uint8_t)(file && path_is_program(row->name) ? 0 : MI_OFF);
+    file_items[FI_SAVE].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
     game_context[1].flags = (uint8_t)(game ? 0 : MI_OFF);
     {
         int c;
@@ -818,20 +859,41 @@ static void select_icon(int i)
 
 static void open_games(void);
 
+/* A drive's window: the one already showing it, else a closed one, else the one furthest
+ * back, which moves to this drive. */
+static void open_drive(char letter)
+{
+    int i, k, use = -1;
+    Win *w;
+
+    for (i = 0; i < DIR_WINS; i++) {
+        if (A.win[i].open && (A.win[i].path[0] & ~0x20) == letter) {
+            bring_to_front(i);
+            return;
+        }
+        if (!A.win[i].open && use < 0)
+            use = i;
+    }
+    if (use < 0) {
+        for (k = 0; k < NUM_WINS && A.z[k] >= DIR_WINS; k++)
+            ;
+        use = A.z[k];
+        close_window(use);
+    }
+    w = &A.win[use];
+    sprintf(w->path, "%c:\\", letter);
+    files_load(w, A.sort_by_size);
+    w->sel = -1;
+    w->top = 0;
+    open_window(use);
+}
+
 static void open_icon(int i)
 {
-    if (A.icon[i].win == GAMES_WIN)
+    if (A.icon[i].kind == ICON_GAMES)
         open_games();
-    else if (A.icon[i].win >= 0) {
-        Win *w = &A.win[A.icon[i].win];
-
-        if (!w->open) {
-            files_load(w, A.sort_by_size);
-            w->sel = -1;
-            w->top = 0;
-        }
-        open_window(A.icon[i].win);
-    }
+    else if (A.icon[i].drive)
+        open_drive(A.icon[i].drive);
     else
         show_alert("The trash is empty.", "", "OK", NULL, CMD_NONE);
 }
@@ -870,6 +932,8 @@ static void enter_dir(int i, const char *name)
 }
 
 static void open_in_editor(const char *path);
+static void run_program(const char *dir, const char *prog, const char *args, int shell,
+                        const char *banner, int wait);
 
 /* Open a row: a folder goes in, a text file into the editor, anything else shows its info. */
 static void open_row(int i)
@@ -886,6 +950,12 @@ static void open_row(int i)
     } else if (path_is_text(row->name)) {
         sprintf(path, "%s%s", w->path, row->name);
         open_in_editor(path);
+    } else if (path_is_program(row->name)) {
+        sprintf(path, "%s%s", w->path, row->name);
+        if (gm_is_batch(path)) /* DOS can't EXEC a batch file: COMMAND.COM runs it */
+            run_program(w->path, "", path, 1, NULL, 0);
+        else
+            run_program(w->path, path, "", 0, NULL, 0);
     } else {
         run(CMD_INFO);
     }
@@ -960,7 +1030,7 @@ static int save_editor(void)
         return 0;
     }
     redraw_window(EDIT_WIN);
-    for (i = 0; i < 2; i++) /* its size changed */
+    for (i = 0; i < DIR_WINS; i++) /* its size changed */
         if (A.win[i].open)
             reload_dir(i);
     return 1;
@@ -1148,21 +1218,31 @@ static void rescan(void)
         open_window(GAMES_WIN);
 }
 
-/* Leave the desktop for a text screen, run the game, come back. */
-static unsigned run_game(const Game *g, const GameInfo *info, int setup)
+/* Leaving the desktop for a program: everything PetiteGUI holds outside its own memory
+ * block goes back to DOS (the games list, the editor's text), its interrupt handler comes
+ * out, the mouse is reset and the screen goes back to text. */
+static int games_were_loaded;
+
+static void leave_desktop(void)
 {
-    unsigned status;
     union REGS r;
 
     mouse_hide();
     mouse_shutdown();
-    games_free(); /* its memory goes back to DOS for the game */
+    games_were_loaded = games_loaded();
+    games_free();
     edit_suspend();
     critical_errors(0);
     r.h.ah = 0;
     r.h.al = (unsigned char)old_video_mode;
     int86(0x10, &r, &r);
-    status = launch_run(g->dir, info, setup);
+}
+
+/* And back: everything put back as it was, the folders read again (the program may have
+ * changed them), the screen drawn afresh. */
+static void return_desktop(void)
+{
+    int i;
 
     while (kbhit())
         getch();
@@ -1173,20 +1253,173 @@ static unsigned run_game(const Game *g, const GameInfo *info, int setup)
         else
             A.win[EDIT_WIN].open = 0;
     }
-    if (A.win[0].open)
-        files_load(&A.win[0], A.sort_by_size); /* the game may have changed files */
-    if (A.win[1].open)
-        files_load(&A.win[1], A.sort_by_size);
+    for (i = 0; i < DIR_WINS; i++)
+        if (A.win[i].open)
+            files_load(&A.win[i], A.sort_by_size);
     gfx_start(gfx_driver());
     mouse_init();
-    if (!games_load_index())
-        games_window_reset();
-    else
-        games_refresh(g->dir); /* its play count and time */
-    A.win[GAMES_WIN].nrows = games_count();
+    if (games_were_loaded) {
+        if (!games_load_index())
+            games_window_reset();
+        A.win[GAMES_WIN].nrows = games_count();
+    }
     draw_desktop(&FULL);
     mouse_show();
+}
+
+static int unsaved_edits(void)
+{
+    char line[40];
+
+    if (!E.open || !E.modified)
+        return 0;
+    sprintf(line, "Save %s before", E.name);
+    show_alert(line, "running anything.", "OK", NULL, CMD_NONE);
+    return 1;
+}
+
+static unsigned run_game(const Game *g, const GameInfo *info, int setup)
+{
+    unsigned status;
+
+    leave_desktop();
+    status = launch_run(g->dir, info, setup);
+    return_desktop();
+    games_refresh(g->dir); /* its play count and time */
+    if (A.win[GAMES_WIN].open)
+        redraw_window(GAMES_WIN);
     return status;
+}
+
+static int shot_mode; /* screenshots: nothing waits for a key */
+
+/* Run a program (see launch_command), then come back; wait shows its output until a key. */
+static void run_program(const char *dir, const char *prog, const char *args, int shell,
+                        const char *banner, int wait)
+{
+    unsigned status;
+
+    if (unsaved_edits())
+        return;
+    leave_desktop();
+    status = launch_command(dir, prog, args, shell, banner);
+    if (wait && !shot_mode) {
+        printf("\nPress any key to return to PetiteGUI");
+        if (getch() == 0)
+            getch();
+    }
+    return_desktop();
+    if (status != 0)
+        show_alert("Couldn't run it:", launch_error_text(status), "OK", NULL, CMD_NONE);
+}
+
+/* The folder a command runs in: the front folder window's, else C: (or the first drive). */
+static const char *current_dir(void)
+{
+    static char root[4];
+    int k;
+
+    for (k = NUM_WINS - 1; k >= 0; k--)
+        if (A.z[k] < DIR_WINS && A.win[A.z[k]].open && !A.win[A.z[k]].not_ready)
+            return A.win[A.z[k]].path;
+    sprintf(root, "%c:\\", first_drive());
+    return root;
+}
+
+/* ---- The text-entry box ---- */
+
+static void show_input(const char *prompt, const char *text)
+{
+    strncpy(A.input.prompt, prompt, sizeof A.input.prompt - 1);
+    A.input.prompt[sizeof A.input.prompt - 1] = '\0';
+    input_layout();
+    field_set(&A.input.field, text, A.input.field.width);
+}
+
+/* Ask for a line of text, starting from what's in text. Returns 1 with it in text (OK or
+ * Enter), 0 if it was cancelled (Cancel or Esc). */
+static int ask_text(const char *prompt, char *text, int size)
+{
+    Rect r;
+    uint8_t __far *save;
+    int x, y, b, prev = 1, ch, ext, result = -1, ux, uy, i;
+
+    show_input(prompt, text);
+    r = A.input.r;
+    r.w += SHADOW_X;
+    r.h += SHADOW_Y;
+    mouse_hide();
+    save = gfx_save(&r);
+    draw_input();
+    mouse_show();
+    while (result < 0) {
+        if (kbhit()) {
+            ch = getch();
+            ext = ch == 0 ? getch() : 0;
+            if (ch == 13)
+                result = 1;
+            else if (ch == 27)
+                result = 0;
+            else if (field_key(&A.input.field, ch, ext)) {
+                mouse_hide();
+                draw_input_field();
+                mouse_show();
+            }
+        }
+        mouse_read(&x, &y, &b);
+        if ((b & 1) && !(prev & 1)) {
+            for (i = 0; i < 2; i++)
+                if (rect_contains(&A.input.b[i], x, y)) {
+                    wait_release(&ux, &uy);
+                    if (rect_contains(&A.input.b[i], ux, uy))
+                        result = i;
+                }
+            if (rect_contains(&A.input.f, x, y)) { /* a click places the caret */
+                Field *f = &A.input.field;
+
+                f->caret = f->scroll + (x - A.input.f.x) / 8;
+                if (f->caret > f->len)
+                    f->caret = f->len;
+                mouse_hide();
+                draw_input_field();
+                mouse_show();
+            }
+        }
+        prev = b;
+    }
+    mouse_hide();
+    if (save != NULL)
+        gfx_restore(&r, save);
+    else
+        draw_desktop(&r);
+    mouse_show();
+    if (result == 1) {
+        strncpy(text, A.input.field.text, (size_t)size - 1);
+        text[size - 1] = '\0';
+    }
+    return result == 1;
+}
+
+/* File > Run...: a command line, filled in with the selected program, run in the folder
+ * through COMMAND.COM (so the PATH and DOS's own commands work), its output kept on the
+ * screen until a key. */
+static void run_dialog(void)
+{
+    char cmd[FIELD_MAX + 1], prompt[48];
+    const char *dir = current_dir();
+    int f = front_window();
+    const Win *w = f >= 0 && f < DIR_WINS ? &A.win[f] : NULL;
+
+    cmd[0] = '\0';
+    if (w != NULL && w->sel >= 0 && !w->rows[w->sel].dir && path_is_program(w->rows[w->sel].name))
+        sprintf(cmd, "%s ", w->rows[w->sel].name);
+    if (strlen(dir) > 30)
+        sprintf(prompt, "Run a command in ...%s:", dir + strlen(dir) - 27);
+    else
+        sprintf(prompt, "Run a command in %s:", dir);
+    if (!ask_text(prompt, cmd, sizeof cmd) || cmd[0] == '\0')
+        return;
+    run_program(dir, "", cmd, 1, NULL, 1);
 }
 
 static void launch_selected(int setup, int checked)
@@ -1200,11 +1433,8 @@ static void launch_selected(int setup, int checked)
 
     if (w->sel < 0 || w->sel >= games_count())
         return;
-    if (E.open && E.modified) {
-        sprintf(line, "Save %s before", E.name);
-        show_alert(line, "running a game.", "OK", NULL, CMD_NONE);
+    if (unsaved_edits())
         return;
-    }
     games_get(w->sel, &g);
     if (!launch_read_info(g.dir, &info)) {
         show_alert(g.name, launch_error_text(LAUNCH_NO_INFO), "OK", NULL, CMD_NONE);
@@ -1340,6 +1570,12 @@ static void run(int cmd)
         break;
     case CMD_QUIT_NOW:
         A.quit = 1;
+        break;
+    case CMD_RUN_DIALOG:
+        run_dialog();
+        break;
+    case CMD_DOS_PROMPT:
+        run_program(current_dir(), "", "", 1, "Type EXIT to return to PetiteGUI.", 0);
         break;
     case CMD_SAVER_NOW:
         start_saver(S.saver == SAVER_OFF ? SAVER_RANDOM : S.saver);
@@ -1542,7 +1778,7 @@ static void on_press(int x, int y)
         press_window(i, x, y);
         return;
     }
-    for (i = 0; i < NUM_ICONS; i++) {
+    for (i = 0; i < A.nicons; i++) {
         r = icon_bounds(i);
         if (rect_contains(&r, x, y)) {
             int twice = i == last_icon && ticks() - last_click < 9;
@@ -1578,7 +1814,7 @@ static void on_key(int ch)
             close_menu();
         return;
     }
-    if (f == EDIT_WIN && E.open && ch != 7 && ch != 15 && ch != 17 && ch != 19 && ch != 23) {
+    if (f == EDIT_WIN && E.open && ch != 4 && ch != 7 && ch != 15 && ch != 17 && ch != 18 && ch != 19 && ch != 23) {
         editor_key(ch, ch == 0 ? getch() : 0);
         return;
     }
@@ -1586,6 +1822,8 @@ static void on_key(int ch)
     case 13: run(f == GAMES_WIN ? CMD_RUN : CMD_OPEN); break; /* Enter */
     case 8: run(CMD_UP); break;        /* Backspace */
     case 5: run(CMD_EDIT_FILE); break; /* Ctrl+E */
+    case 18: run(CMD_RUN_DIALOG); break; /* Ctrl+R */
+    case 4: run(CMD_DOS_PROMPT); break; /* Ctrl+D */
     case 19: run(CMD_SAVE); break;     /* Ctrl+S */
     case 7: run(CMD_GAMES); break;   /* Ctrl+G */
     case 15: run(CMD_OPEN); break;   /* Ctrl+O */
@@ -1655,6 +1893,18 @@ static int shot(int scene, const char *path)
         zoom_window(GAMES_WIN);
         bring_to_front(1);
         set_window_rect(1, rect_resize(&A.win[1].r, 240, 96, MIN_WIN_W, MIN_WIN_H, SCREEN_W, SCREEN_H));
+    } else if (scene == 10) { /* File > Run... with a command (tools/dostest.sh) */
+        run_program("C:\\", "", "C:\\GAMES\\MEMTEST\\FREEMEM.EXE C:\\OUT\\RUNCMD.TXT fromrun", 1, NULL, 0);
+        mouse_hide();
+    } else if (scene == 11) { /* a batch file double-clicked in a folder (tools/dostest.sh) */
+        enter_dir(1, "GAMES");
+        enter_dir(1, "BATCH");
+        select_row(1, find_row(1, "GO.BAT"));
+        open_row(1);
+        mouse_hide();
+    } else if (scene == 12) { /* the Run... box */
+        show_input("Run a command in C:\\GAMES\\:", "PKUNZIP DOOM.ZIP");
+        draw_input();
     } else if (scene == 9) { /* System > About */
         run(CMD_ABOUT);
     } else if (scene == 3) {
@@ -1764,6 +2014,8 @@ int main(int argc, char **argv)
             list = 1;
         else if (stricmp(argv[i], "/MEM") == 0)
             mem = 1;
+        else if (stricmp(argv[i], "/DRIVES") == 0)
+            mem = 2;
         else if (strnicmp(argv[i], "/RUN=", 5) == 0)
             run_name = argv[i] + 5;
         else if (strnicmp(argv[i], "/SAVER=", 7) == 0)
@@ -1791,6 +2043,14 @@ int main(int argc, char **argv)
             printf("Couldn't write PETITE.CFG\n");
             return 1;
         }
+        return 0;
+    }
+    if (mem == 2) {
+        Drive d[MAX_DRIVES];
+        int n = drives_find(d), k;
+
+        for (k = 0; k < n; k++)
+            printf("%c: %s\n", d[k].letter, drive_kind_name(d[k].kind));
         return 0;
     }
     if (mem)
@@ -1835,7 +2095,10 @@ int main(int argc, char **argv)
         return f == NULL;
     }
     if (scene >= 0) {
-        int ok = shot(scene, dump);
+        int ok;
+
+        shot_mode = 1;
+        ok = shot(scene, dump);
 
         set_video_mode(old_mode);
         if (!ok)

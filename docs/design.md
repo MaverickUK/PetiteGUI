@@ -13,7 +13,9 @@ mouse.c    INT 33h
 games.c    the games list: PETITE.CFG, scanning for !GM_INFO.TXT, PETITE.IDX
 launch.c   running a game as GameMinder does, and its play log
 gminfo.c   GameMinder's formats and launch rules, pure C (host tested)
-swap.c     EMS or the swap file, then swapcore.asm, which runs the game
+swap.c     EMS or the swap file, then swapcore.asm, which runs the game (or any program)
+drives.c   the drives DOS has
+field.c    the text-entry box's editing, pure C (host tested)
 files.c    a directory window's listing (findfirst/findnext)
 edit.c     the text editor: opening, saving, keys, the view
 textbuf.c  its gap buffer, pure C (host tested)
@@ -77,6 +79,18 @@ Anything else PetiteGUI needs comes from DOS directly (`_dos_allocmem`): the pix
 Before that, `run_game` frees the games list and any other DOS blocks, resets the mouse driver and returns to text mode; afterwards it sets the video mode again, re-initialises the mouse, reads the games list back from `PETITE.IDX` and redraws the desktop.
 
 If a program leaves something resident (a TSR from a `before:` line, say) in the memory PetiteGUI needs back, the block can't grow again: the core says why and quits to DOS, as GameMinder does.
+
+## Drives
+
+`drives.c` finds the drives without reading any: DOS's filename parser (`INT 21h` function 29h) rejects a letter that isn't a drive, from its tables alone; MSCDEX (`INT 2Fh` AX=150Bh) knows its CD-ROMs; IOCTL calls (`INT 21h` AX=4409h, 4408h) say whether a drive is remote or removable. DOS answers for B: even with one floppy drive (it's A: again, asking for disks to be swapped), so B: shows only when the BIOS's equipment word (`INT 11h`) says there are two. The icons go in columns from the right, three in the first (above the trash) and four in the others.
+
+There are four folder windows. A drive's icon brings up the window already showing it, else a closed one, else the one furthest back, which moves to that drive.
+
+## Running programs
+
+Games, programs double-clicked in a folder, Run… and the DOS prompt all go the same way: `leave_desktop` hands back every DOS block PetiteGUI holds outside its own (the games list, the editor's text), takes out its critical-error handler, resets the mouse and returns to text mode; `launch.c` runs the program with PetiteGUI swapped out; `return_desktop` puts it all back, reads the open folders again and redraws. Nothing runs while the editor has unsaved changes, since its text comes back from the disk.
+
+An EXE or COM is run directly. A batch file, Run…'s command line and the DOS prompt go through `COMMAND.COM` (`/C`, or nothing for the prompt), which finds programs on the PATH and runs DOS's own commands; it stays in memory under the program, a few KB.
 
 ## Folders
 

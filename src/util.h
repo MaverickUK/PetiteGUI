@@ -14,6 +14,8 @@ void fmt_thousands(long v, char *buf);
 int path_parent(char *path, char *child, int child_size);
 /* Files the editor opens on a double-click: .TXT, .INI and .CFG. */
 int path_is_text(const char *name);
+/* Programs DOS runs: .EXE, .COM and .BAT. */
+int path_is_program(const char *name);
 /* "TXT" for "README.TXT", "" for "README". */
 const char *path_ext(const char *name);
 

@@ -18,7 +18,8 @@ esac
 
 work=$(mktemp -d)
 [ -n "${KEEP:-}" ] && echo "work: $work" || trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/PETITE" "$work/GUI" "$work/OUT"
+mkdir -p "$work/PETITE" "$work/GUI" "$work/OUT" "$work/DDRIVE" "$work/CD"
+echo "a CD" > "$work/CD/README.TXT"
 cp build/PETITE.EXE "$work/PETITE/"
 cp build/PETITE.EXE "$work/GUI/"
 printf 'scanpath:C:\\GAMES\\MEMTEST\n' > "$work/GUI/PETITE.CFG"
@@ -44,6 +45,8 @@ cycles=max
 ems=true
 [autoexec]
 mount c "$work"
+mount d "$work/DDRIVE"
+mount e "$work/CD" -t cdrom
 c:
 cd \\PETITE
 C:\\GAMES\\MEMTEST\\FREEMEM.EXE C:\\OUT\\BASE.TXT direct
@@ -57,6 +60,9 @@ PETITE /RUN=memory > C:\\OUT\\RUN3.TXT
 PETITE /RUN=noname > C:\\OUT\\RUN4.TXT
 cd \\GUI
 PETITE /CGA /SHOT=4 /DUMP=C:\\OUT\\BACK.BIN > C:\\OUT\\GUI.TXT
+PETITE /EGA /SHOT=10 /DUMP=C:\\OUT\\RUNCMD.BIN > C:\\OUT\\RUNCMDO.TXT
+PETITE /EGA /SHOT=11 /DUMP=C:\\OUT\\OPENBAT.BIN > C:\\OUT\\OPENBATO.TXT
+PETITE /DRIVES > C:\\OUT\\DRIVES.TXT
 PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
 PETITE /CGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\CCYCLE.BIN
 PETITE /EGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\ECYCLE.BIN
@@ -158,6 +164,15 @@ for k in ["cycle", "blank", "stars", "lines", "maze", "melt", "life", "games", "
 cfg = read("SET", "PETITE.CFG").replace("\r", "")
 check(cfg == "; my settings\nscanpath:C:\\GAMES\nsaver:maze\n; the end\nsaverdelay:15\n",
       "/SET changed one setting and added another, keeping the rest: %r" % cfg)
+runcmd = re.findall(r"free=(\d+) fromrun", read("OUT", "RUNCMD.TXT"))
+check(len(runcmd) == 1, "File > Run... ran a command through COMMAND.COM, with its arguments")
+if base and runcmd:
+    lost = int(base[0]) - int(runcmd[0])
+    check(lost <= 8, "and it got %s KB, %d KB less than run directly (COMMAND.COM stays under it)" % (runcmd[0], lost))
+check(len(re.findall(r"free=", read("OUT", "BATCH.TXT"))) == 2, "a batch file double-clicked in a folder ran")
+drives = read("OUT", "DRIVES.TXT")
+check("C: hard disk" in drives and "D: hard disk" in drives and "E: CD-ROM" in drives and "B:" not in drives,
+      "the drives found: %s" % drives.strip().replace("\r", "").replace("\n", ", "))
 print("%d failed" % len(fails))
 sys.exit(1 if fails else 0)
 EOF

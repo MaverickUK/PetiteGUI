@@ -20,6 +20,13 @@ int launch_exists(const char *path);
  * does, and returns 0, a DOS error code, or one of the SWAP_ERR_ codes. */
 unsigned launch_run(const char *dir, const GameInfo *g, int setup);
 
+/* Run a program in dir, swapped out, in text mode: prog with args (prog a full path), or with
+ * shell set, the command line args through COMMAND.COM (/C), which finds programs on the
+ * PATH and runs DOS's own commands; or COMMAND.COM itself, for a DOS prompt, if args is "".
+ * banner is printed first. Returns as launch_run does. */
+unsigned launch_command(const char *dir, const char *prog, const char *args, int shell, const char *banner);
+const char *launch_comspec(void);
+
 /* A sentence for a failed launch. */
 const char *launch_error_text(unsigned status);
 

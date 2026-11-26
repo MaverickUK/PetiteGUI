@@ -61,6 +61,24 @@ static int pct(int v, int p)
     return (v * p + 50) / 100;
 }
 
+static int isqrt(long v)
+{
+    long r = 0, b = 1L << 14;
+
+    while (b > v)
+        b >>= 2;
+    while (b) {
+        if (v >= r + b) {
+            v -= r + b;
+            r = (r >> 1) + b;
+        } else {
+            r >>= 1;
+        }
+        b >>= 2;
+    }
+    return (int)r;
+}
+
 static int imax(int a, int b)
 {
     return a > b ? a : b;
@@ -256,18 +274,17 @@ int menu_item_at(int mi, int x, int y)
 
 #define ICON_W 40
 #define ICON_H 18
-#define ICON_CX (SCREEN_W - 44)
 
 static Rect label_rect(int i)
 {
     int w = gfx_text_w(A.icon[i].label) + 8;
 
-    return rect_make(ICON_CX - w / 2, A.icon[i].y + ICON_H + 2, w, 10);
+    return rect_make(A.icon[i].x - w / 2, A.icon[i].y + ICON_H + 2, w, 10);
 }
 
 Rect icon_bounds(int i)
 {
-    Rect box = rect_make(ICON_CX - ICON_W / 2, A.icon[i].y, ICON_W, ICON_H);
+    Rect box = rect_make(A.icon[i].x - ICON_W / 2, A.icon[i].y, ICON_W, ICON_H);
     Rect label = label_rect(i);
 
     return rect_union(&box, &label);
@@ -275,7 +292,7 @@ Rect icon_bounds(int i)
 
 void draw_icon(int i)
 {
-    int x = ICON_CX - ICON_W / 2, y = A.icon[i].y, w = ICON_W, h = ICON_H;
+    int x = A.icon[i].x - ICON_W / 2, y = A.icon[i].y, w = ICON_W, h = ICON_H;
     int sx, sw, sh, lx, ly, lw, lh, bx, bw, bt, bh, k;
     Rect lr;
 
@@ -296,6 +313,26 @@ void draw_icon(int i)
         gfx_fill(lx, ly, lw, lh, T->icon_label);
         gfx_frame(lx, ly, lw, lh, T->icon_line);
         hline(lx + 4, ly + pct(lh, 45), lw - 8, T->icon_detail);
+        break;
+    case ICON_CDROM: /* a disc: an ellipse (round on the screen), with a hole */
+        for (k = 0; k < h; k++) {
+            int dy = 2 * k + 1 - h, half = isqrt((long)h * h - (long)dy * dy) * w / (2 * h);
+
+            hline(x + w / 2 - half, y + k, half * 2, k == 0 || k == h - 1 ? T->icon_line : T->icon_fill);
+            gfx_fill(x + w / 2 - half, y + k, 1, 1, T->icon_line);
+            gfx_fill(x + w / 2 + half - 1, y + k, 1, 1, T->icon_line);
+        }
+        gfx_fill(x + w / 2 - 4, y + h / 2 - 1, 8, 3, T->icon_line);
+        hline(x + w / 2 + 6, y + pct(h, 30), pct(w, 20), T->icon_detail);
+        break;
+    case ICON_NETWORK: /* a disk on a wire */
+        bt = y + pct(h, 5);
+        bh = pct(h, 50);
+        gfx_fill(x, bt, w, bh, T->icon_fill);
+        gfx_frame(x, bt, w, bh, T->icon_line);
+        gfx_fill(x + w - 9, bt + pct(bh, 60), 4, imax(1, pct(bh, 20)), T->icon_led);
+        gfx_fill(x + w / 2 - 1, bt + bh, 2, y + h - 2 - bt - bh, T->icon_line);
+        hline(x + 2, y + h - 2, w - 4, T->icon_line);
         break;
     case ICON_DISK:
         bt = y + pct(h, 22);
@@ -733,7 +770,7 @@ void draw_desktop(const Rect *area)
     if (rect_empty(&clip))
         return;
     gfx_pattern(clip.x, clip.y, clip.w, clip.h, PAT_CHECKER, T->desk_on, T->desk_off);
-    for (i = 0; i < NUM_ICONS; i++) {
+    for (i = 0; i < A.nicons; i++) {
         r = icon_bounds(i);
         if (rect_intersect(&r, &r, &clip))
             draw_icon(i);
@@ -838,4 +875,58 @@ int alert_button_at(int x, int y)
         if (rect_contains(&A.alert.b[i], x, y))
             return i;
     return -1;
+}
+
+/* ---- The text-entry box ---- */
+
+#define INPUT_CHARS 44
+
+void input_layout(void)
+{
+    Input *in = &A.input;
+    int w = SNAP8_UP(ALERT_PAD * 2 + (INPUT_CHARS + 1) * 8), h = 8 + 8 + 10 + 4 + ROW_H + 4 + 8 + BUTTON_H + 8;
+    int x = SNAP8((SCREEN_W - w) / 2), y = (SCREEN_H - h) / 2, bw = gfx_text_w("Cancel") + 16;
+
+    in->r = rect_make(x, y, w, h);
+    in->f = rect_make(x + ALERT_PAD, y + 3 + 8 + 12, (INPUT_CHARS + 1) * 8, ROW_H + 4);
+    in->b[1] = rect_make(x + w - ALERT_PAD - bw, in->f.y + in->f.h + 8, bw, BUTTON_H);
+    in->b[0] = rect_make(in->b[1].x - 16 - bw, in->b[1].y, bw, BUTTON_H);
+    in->field.width = INPUT_CHARS;
+}
+
+void draw_input_field(void)
+{
+    const Input *in = &A.input;
+    const Field *f = &in->field;
+    char shown[INPUT_CHARS + 2];
+    int n = f->len - f->scroll, cx;
+
+    if (n > INPUT_CHARS)
+        n = INPUT_CHARS;
+    if (n < 0)
+        n = 0;
+    memcpy(shown, f->text + f->scroll, (size_t)n);
+    shown[n] = '\0';
+    gfx_fill(in->f.x + 1, in->f.y + 1, in->f.w - 2, in->f.h - 2, T->win_bg);
+    gfx_frame(in->f.x, in->f.y, in->f.w, in->f.h, T->frame);
+    gfx_text(in->f.x + 4, in->f.y + 2, shown, T->text, 0);
+    cx = in->f.x + 4 + (f->caret - f->scroll) * 8; /* the caret: a bar before its character */
+    gfx_fill(cx - 1, in->f.y + 2, 2, 8, T->text);
+}
+
+void draw_input(void)
+{
+    const Input *in = &A.input;
+    const Rect *r = &in->r;
+
+    shadow(r->x, r->y, r->w, r->h);
+    gfx_fill(r->x, r->y, r->w, r->h, T->dialog_bg);
+    gfx_frame(r->x, r->y, r->w, r->h, T->frame);
+    vline(r->x + 1, r->y, r->h, T->frame);
+    vline(r->x + r->w - 2, r->y, r->h, T->frame);
+    gfx_frame(r->x + 4, r->y + 3, r->w - 8, r->h - 6, T->frame);
+    gfx_text(in->f.x, r->y + 3 + 8, in->prompt, T->text, 0);
+    draw_input_field();
+    button(&in->b[0], "Cancel", 0);
+    button(&in->b[1], "OK", 1);
 }

@@ -41,7 +41,7 @@ int launch_exists(const char *path)
     return _dos_findfirst(path, _A_NORMAL | _A_RDONLY | _A_HIDDEN | _A_SYSTEM | _A_ARCH, &f) == 0;
 }
 
-static const char *comspec(void)
+const char *launch_comspec(void)
 {
     const char *c = getenv("COMSPEC");
 
@@ -100,10 +100,10 @@ unsigned launch_run(const char *dir, const GameInfo *g, int setup)
                 fprintf(f, "%s\n", lines[i]);
             fclose(f);
         }
-        strcpy(prog, comspec());
+        strcpy(prog, launch_comspec());
         sprintf(args, "/C %s", script);
     } else {
-        gm_command(dir, setup ? g->setup : g->exec, comspec(), prog, sizeof prog, args, sizeof args);
+        gm_command(dir, setup ? g->setup : g->exec, launch_comspec(), prog, sizeof prog, args, sizeof args);
     }
 
     now(&start_day, &start_minute, stamp);
@@ -124,6 +124,24 @@ unsigned launch_run(const char *dir, const GameInfo *g, int setup)
         log_play(dir, stamp);
     }
     return status;
+}
+
+unsigned launch_command(const char *dir, const char *prog, const char *args, int shell, const char *banner)
+{
+    char tail[GM_PATH_MAX + 4];
+    SwapOptions o;
+    SwapReport r;
+
+    if (banner != NULL && banner[0])
+        printf("%s\n", banner);
+    o.use_ems = S.use_ems;
+    o.temp_dir = S.temp_dir;
+    if (!shell)
+        return swap_run(prog, args, dir, &o, &r);
+    tail[0] = '\0';
+    if (args[0])
+        sprintf(tail, "/C %.*s", GM_PATH_MAX - 4, args);
+    return swap_run(launch_comspec(), tail, dir, &o, &r);
 }
 
 const char *launch_error_text(unsigned status)

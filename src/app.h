@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "rect.h"
 #include "theme.h"
+#include "field.h"
 
 /* Layout, in pixels of the 640x200 screen. Columns are 8 pixels; a row of text is 8 high. */
 #define MENU_H 11    /* menu bar; its bottom line is at y = MENU_H */
@@ -19,12 +20,13 @@
 #define MIN_WIN_H 72
 
 #define MAX_ROWS 160 /* files a directory window lists */
-#define NUM_WINS 4
-#define NUM_ICONS 4
+#define DIR_WINS 4     /* folder windows: 0 to 3 */
+#define NUM_WINS 6
+#define MAX_ICONS 28   /* a drive each, the games and the trash */
 #define NUM_MENUS 6    /* on the menu bar */
 #define CONTEXT_MENU NUM_MENUS /* the right-click menu, after them */
-#define GAMES_WIN 2    /* the games list's window */
-#define EDIT_WIN 3     /* the text editor's */
+#define GAMES_WIN 4    /* the games list's window */
+#define EDIT_WIN 5     /* the text editor's */
 
 typedef struct Row {
     char name[13];
@@ -56,13 +58,21 @@ typedef struct WinParts {
     int visible; /* list rows that fit */
 } WinParts;
 
-enum { ICON_FLOPPY, ICON_DISK, ICON_GAMES, ICON_TRASH };
+enum { ICON_FLOPPY, ICON_DISK, ICON_CDROM, ICON_NETWORK, ICON_GAMES, ICON_TRASH };
 
 typedef struct Icon {
-    const char *label;
-    int kind, y;
-    int win; /* the window it opens, or -1 */
+    char label[8];
+    int kind;
+    int x, y;    /* x is its centre */
+    char drive;  /* the drive it opens, or 0 */
 } Icon;
+
+/* The text-entry box: a prompt, a field, and Cancel / OK. */
+typedef struct Input {
+    char prompt[48];
+    Field field;
+    Rect r, f, b[2]; /* the box, the field, the buttons */
+} Input;
 
 enum { MI_SEP = 1, MI_OFF = 2, MI_CHECK = 4 };
 
@@ -93,13 +103,15 @@ typedef struct Alert {
 typedef struct App {
     Win win[NUM_WINS];
     int z[NUM_WINS]; /* back to front */
-    Icon icon[NUM_ICONS];
+    Icon icon[MAX_ICONS];
+    int nicons;
     int sel_icon;
     Menu menu[NUM_MENUS + 1];
     int open_menu, hot; /* -1 when none */
     uint8_t __far *menu_save;
     int alert_on;
     Alert alert;
+    Input input;
     uint8_t __far *alert_save;
     int sort_by_size;
     int has_ega;
@@ -134,5 +146,8 @@ void alert_layout(void);
 void draw_alert(void);
 int alert_button_at(int x, int y);
 void draw_clock(void);
+void input_layout(void);
+void draw_input(void);       /* the whole box */
+void draw_input_field(void); /* just the field, as it's typed in */
 
 #endif

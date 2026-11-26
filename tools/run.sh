@@ -6,7 +6,8 @@
 #
 # C: holds PETITE.EXE, a PETITE.CFG pointing at C:\GAMES, and the sample games from
 # tests/dos/GAMES ("Memory Test" really runs: tests/dos/freemem.c, which writes how much memory
-# it was given to C:\OUT\RUN.TXT). The screensaver starts after a minute. Speed is near an IBM PC/XT's for Paper (4.77 MHz 8088)
+# it was given to C:\OUT\RUN.TXT). D: is an empty drive and E: a CD-ROM. The screensaver starts
+# after a minute. Speed is near an IBM PC/XT's for Paper (4.77 MHz 8088)
 # and a 286's for Ink; CYCLES=max runs it flat out.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -27,7 +28,8 @@ esac
 work=$(mktemp -d)
 cp build/PETITE.EXE "$work/"
 cp -R tests/dos/GAMES "$work/GAMES"
-mkdir -p "$work/OUT"
+mkdir -p "$work/OUT" "$work/D" "$work/CD"
+echo "A file on the CD-ROM." > "$work/CD/README.TXT"
 (cd "$work" && WATCOM=$WATCOM INCLUDE=$WATCOM/h PATH=$OWBIN:$PATH \
     "$OWBIN/wcl" -q -bt=dos -ms -0 -fe=GAMES/MEMTEST/FREEMEM.EXE "$OLDPWD/tests/dos/freemem.c" >/dev/null \
     && rm -f ./*.o ./*.obj)
@@ -47,6 +49,8 @@ aspect=true
 ems=true
 [autoexec]
 mount c "$work"
+mount d "$work/D"
+mount e "$work/CD" -t cdrom
 c:
 PETITE
 EOF

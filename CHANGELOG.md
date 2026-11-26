@@ -2,6 +2,24 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.7.0] - 2026-11-26
+
+Running anything, and every drive. The first step of the [roadmap](ROADMAP.md).
+
+### Added
+
+- **Run any program from a folder window:** double-click an EXE, COM or BAT file (or Enter, or File › Open) and it runs with PetiteGUI swapped out of memory, as games do; a batch file runs through `COMMAND.COM`.
+- **File › Run…** (Ctrl+R, and on the right-click menu for programs) asks for a command line, filled in with the selected program, and runs it in the front folder through `COMMAND.COM`, so the PATH and DOS's own commands work. Its output stays on the screen until a key.
+- **File › DOS prompt** (Ctrl+D): `COMMAND.COM` with PetiteGUI swapped out, in the front folder; `EXIT` comes back.
+- **A text-entry box** (the Run… box first): a caret, Backspace and Delete, the arrows, Home and End, a click to place the caret, Enter for OK and Esc to cancel. Its editing is `src/field.c`, host tested.
+- **An icon for every drive DOS has**, found without reading any of them: floppy drives (B: only when there are two), hard disks, CD-ROM drives (from MSCDEX) and network drives, each with an icon of its own, in columns from the right. Up to four folder windows can be open; opening a fifth drive reuses the one furthest back.
+- `/DRIVES` lists the drives found; `/SHOT=10` to `12` (a command run, a batch file opened, the Run… box). `tools/dostest.sh` mounts a second drive and a CD-ROM, and checks Run… and a double-clicked batch file.
+
+### Changed
+
+- Nothing runs while the editor has unsaved changes: the editor's text is read back from the disk afterwards, so they'd be lost.
+- Coming back from any program, the folder windows are read again (it may have changed them).
+
 ## [0.6.0] - 2026-11-26
 
 Resizing windows.
@@ -108,6 +126,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.7.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.7.0
 [0.6.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.6.0
 [0.5.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.5.0
 [0.4.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.4.0

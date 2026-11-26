@@ -8,6 +8,7 @@
 #include "../src/textbuf.h"
 #include "../src/saverlib.h"
 #include "../src/gamecols.h"
+#include "../src/field.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -203,6 +204,8 @@ static void test_paths(void)
     CHECK(path_is_text("README.TXT") && path_is_text("setup.ini") && path_is_text("A.Cfg"));
     CHECK(!path_is_text("GAME.EXE") && !path_is_text("TXT") && !path_is_text("X.TXTX") && !path_is_text("X.TX"));
     CHECK(strcmp(path_ext("A.B.C"), "C") == 0 && strcmp(path_ext("NOEXT"), "") == 0);
+    CHECK(path_is_program("DOOM.EXE") && path_is_program("go.bat") && path_is_program("Command.Com"));
+    CHECK(!path_is_program("README.TXT") && !path_is_program("EXE") && !path_is_program("X.EXEC"));
 }
 
 /* The text as a C string, for comparing. */
@@ -393,6 +396,44 @@ static void test_gamecols(void)
     CHECK(out[0] == '\0'); /* blank, not 0, for never played */
 }
 
+static void test_field(void)
+{
+    Field f;
+    int i;
+
+    field_set(&f, "PKUNZIP", 10);
+    CHECK(f.caret == 7 && f.len == 7 && f.scroll == 0);
+    field_key(&f, ' ', 0);
+    field_key(&f, 'A', 0);
+    CHECK(strcmp(f.text, "PKUNZIP A") == 0);
+    field_key(&f, 0, 71);                     /* Home */
+    field_key(&f, 'X', 0);
+    CHECK(strcmp(f.text, "XPKUNZIP A") == 0 && f.caret == 1);
+    field_key(&f, 0, 83);                     /* Delete: the P */
+    CHECK(strcmp(f.text, "XKUNZIP A") == 0);
+    field_key(&f, 8, 0);                      /* Backspace: the X */
+    CHECK(strcmp(f.text, "KUNZIP A") == 0 && f.caret == 0);
+    CHECK(field_key(&f, 8, 0) == 0);          /* nothing before the caret */
+    CHECK(field_key(&f, 0, 75) == 0);         /* nor left of it */
+
+    /* typing past the width scrolls, keeping the caret showing */
+    field_set(&f, "", 10);
+    for (i = 0; i < 25; i++)
+        field_key(&f, 'a' + i, 0);
+    CHECK(f.caret == 25 && f.scroll == 16);
+    field_key(&f, 0, 71);
+    CHECK(f.scroll == 0);
+    field_key(&f, 0, 79);
+    CHECK(f.scroll == 16);
+
+    /* full: no more */
+    field_set(&f, "", 10);
+    for (i = 0; i < 100; i++)
+        field_key(&f, 'x', 0);
+    CHECK(f.len == FIELD_MAX && (int)strlen(f.text) == FIELD_MAX);
+    CHECK(field_key(&f, 13, 0) == 0);         /* Enter isn't for the field */
+}
+
 int main(void)
 {
     test_intersect();
@@ -412,6 +453,7 @@ int main(void)
     test_maze();
     test_segments();
     test_gamecols();
+    test_field();
     printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

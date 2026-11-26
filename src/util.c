@@ -55,17 +55,30 @@ const char *path_ext(const char *name)
     return dot != NULL && dot != name ? dot + 1 : name + strlen(name);
 }
 
-int path_is_text(const char *name)
+static int ext_in(const char *name, const char *const *exts, int n)
 {
-    static const char *const exts[] = { "TXT", "INI", "CFG" };
     const char *e = path_ext(name);
     int i, k;
 
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < n; i++) {
         for (k = 0; k < 3 && e[k] && toupper((unsigned char)e[k]) == exts[i][k]; k++)
             ;
         if (k == 3 && e[3] == '\0')
             return 1;
     }
     return 0;
+}
+
+int path_is_text(const char *name)
+{
+    static const char *const exts[] = { "TXT", "INI", "CFG" };
+
+    return ext_in(name, exts, 3);
+}
+
+int path_is_program(const char *name)
+{
+    static const char *const exts[] = { "EXE", "COM", "BAT" };
+
+    return ext_in(name, exts, 3);
 }
