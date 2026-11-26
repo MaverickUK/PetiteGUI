@@ -53,6 +53,8 @@ The system BIOS keeps an 8×8 font for characters 0–127 at `F000:FA6E`, on eve
 
 There's no off-screen buffer. When something changes, `redraw()` draws the rectangle that changed, back to front, clipped to it: the desktop pattern, the icons, the windows in z-order, the menu bar. A window moving redraws where it was and where it is.
 
+What's drawn is kept to what changed, so the screen doesn't flash while it's covered and drawn again: if one window covers the whole rectangle, drawing starts from that window; selecting a row redraws the old and new rows; moving through a menu redraws the item left and the item reached.
+
 Menus and alerts are different: they **save the pixels under them** (`gfx_save`) and put them back when they close, which is faster and needs no redraw of what's beneath. Paper's File menu, with its shadow, is about 1.9 KB; Ink's, in four planes, about 7.5 KB.
 
 Dragging a window draws an XOR outline (drawn twice, it leaves the screen as it was), and only moves the window when the button is let go. Resizing works the same way from the size box: the outline's bottom-right corner follows the pointer, kept within `rect_resize`'s limits (no smaller than 176 x 72, on the screen, a whole number of bytes wide). A zoomed window remembers its size and place, to go back to.
@@ -83,7 +85,7 @@ If a program leaves something resident (a TSR from a `before:` line, say) in the
 
 ## Drives
 
-`drives.c` finds the drives without reading any: DOS's filename parser (`INT 21h` function 29h) rejects a letter that isn't a drive, from its tables alone; MSCDEX (`INT 2Fh` AX=150Bh) knows its CD-ROMs; IOCTL calls (`INT 21h` AX=4409h, 4408h) say whether a drive is remote or removable. DOS answers for B: even with one floppy drive (it's A: again, asking for disks to be swapped), so B: shows only when the BIOS's equipment word (`INT 11h`) says there are two. The icons go in columns from the right, three in the first (above the trash) and four in the others.
+`drives.c` finds the drives without reading any: DOS's filename parser (`INT 21h` function 29h) rejects a letter that isn't a drive, from its tables alone; MSCDEX (`INT 2Fh` AX=150Bh) knows its CD-ROMs; IOCTL calls (`INT 21h` AX=4409h, 4408h) say whether a drive is remote or removable. DOS answers for B: even with one floppy drive (it's A: again, asking for disks to be swapped), so B: shows only when the BIOS's equipment word (`INT 11h`) says there are two. The icons go in columns of five from the right.
 
 There are four folder windows. A drive's icon brings up the window already showing it, else a closed one, else the one furthest back, which moves to that drive.
 

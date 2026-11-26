@@ -218,36 +218,51 @@ void draw_menu(int mi)
 {
     const Menu *m = &A.menu[mi];
     Rect r = menu_box(mi);
-    int i, y, on, off, left = text_left(m);
-    const MenuItem *it;
-    uint8_t c;
+    int i;
 
     shadow(r.x, r.y, r.w, r.h);
     gfx_fill(r.x, r.y, r.w, r.h, T->menu_bg);
     gfx_frame(r.x, r.y, r.w, r.h, T->frame);
-    y = r.y + MENU_PAD;
-    for (i = 0; i < m->n; i++) {
-        it = &m->items[i];
-        if (it->flags & MI_SEP) {
-            if (T->separator < 0)
-                gfx_pattern(r.x + 1, y + SEP_H / 2, r.w - 2, 1, PAT_DOTS, T->frame, T->menu_bg);
-            else
-                hline(r.x + 1, y + SEP_H / 2, r.w - 2, (uint8_t)T->separator);
-            y += SEP_H;
-            continue;
-        }
-        off = (it->flags & MI_OFF) != 0;
-        on = i == A.hot && !off;
-        if (on)
-            gfx_fill(r.x + 1, y, r.w - 2, ROW_H + 1, T->sel);
-        c = on ? T->sel_text : T->menu_text;
-        if (it->flags & MI_CHECK)
-            gfx_mask(r.x + 6, y + 2, check_mask, ICON_ROWS - 1, 16, c);
-        text_dim(r.x + left, y + 1, it->label, off, c);
-        if (it->key)
-            text_dim(r.x + r.w - 8 - gfx_text_w(it->key), y + 1, it->key, off, c);
-        y += ROW_H + 1;
+    for (i = 0; i < m->n; i++)
+        draw_menu_item(mi, i);
+}
+
+/* The top of item i in a menu */
+static int item_y(const Menu *m, const Rect *r, int i)
+{
+    int k, y = r->y + MENU_PAD;
+
+    for (k = 0; k < i; k++)
+        y += (m->items[k].flags & MI_SEP) ? SEP_H : ROW_H + 1;
+    return y;
+}
+
+/* One item: moving the highlight redraws only the two items it leaves and reaches, not the
+ * whole menu (which would flash). */
+void draw_menu_item(int mi, int i)
+{
+    const Menu *m = &A.menu[mi];
+    Rect r = menu_box(mi);
+    const MenuItem *it = &m->items[i];
+    int y = item_y(m, &r, i), on, off, left = text_left(m);
+    uint8_t c;
+
+    if (it->flags & MI_SEP) {
+        if (T->separator < 0)
+            gfx_pattern(r.x + 1, y + SEP_H / 2, r.w - 2, 1, PAT_DOTS, T->frame, T->menu_bg);
+        else
+            hline(r.x + 1, y + SEP_H / 2, r.w - 2, (uint8_t)T->separator);
+        return;
     }
+    off = (it->flags & MI_OFF) != 0;
+    on = i == A.hot && !off;
+    gfx_fill(r.x + 1, y, r.w - 2, ROW_H + 1, on ? T->sel : T->menu_bg);
+    c = on ? T->sel_text : T->menu_text;
+    if (it->flags & MI_CHECK)
+        gfx_mask(r.x + 6, y + 2, check_mask, ICON_ROWS - 1, 16, c);
+    text_dim(r.x + left, y + 1, it->label, off, c);
+    if (it->key)
+        text_dim(r.x + r.w - 8 - gfx_text_w(it->key), y + 1, it->key, off, c);
 }
 
 int menu_item_at(int mi, int x, int y)
@@ -343,7 +358,7 @@ void draw_icon(int i)
         gfx_fill(x + w - 9, bt + pct(bh, 74), 4, imax(1, pct(bh, 14)), T->icon_led);
         hline(x + 4, bt + pct(bh, 30), pct(w, 50), T->icon_detail);
         break;
-    case ICON_GAMES: /* a joystick */
+    default: /* ICON_GAMES: a joystick */
         bx = x + pct(w, 12);
         bw = pct(w, 76);
         bt = y + pct(h, 60);
@@ -354,18 +369,6 @@ void draw_icon(int i)
         gfx_fill(x + w / 2 - 1, y + pct(h, 25), 3, bt - y - pct(h, 25), T->icon_line);
         gfx_fill(x + w / 2 - 6, y, 13, pct(h, 30), T->icon_detail);
         gfx_frame(x + w / 2 - 6, y, 13, pct(h, 30), T->icon_line);
-        break;
-    default:
-        gfx_fill(x + pct(w, 15), y + pct(h, 12), pct(w, 70), imax(1, pct(h, 8)), T->icon_line);
-        gfx_frame(x + pct(w, 40), y, pct(w, 20), pct(h, 14), T->icon_line);
-        bx = x + pct(w, 22);
-        bw = pct(w, 56);
-        bt = y + pct(h, 24);
-        bh = y + h - bt;
-        gfx_fill(bx, bt, bw, bh, T->icon_fill);
-        gfx_frame(bx, bt, bw, bh, T->icon_line);
-        for (k = 1; k < 4; k++)
-            vline(bx + pct(bw, k * 25), bt + 2, bh - 4, T->icon_detail);
         break;
     }
 
@@ -763,19 +766,30 @@ void draw_window(int i)
 void draw_desktop(const Rect *area)
 {
     Rect clip, r;
-    int k, i;
+    int k, i, first;
 
     gfx_set_clip(area);
     clip = gfx_get_clip();
     if (rect_empty(&clip))
         return;
-    gfx_pattern(clip.x, clip.y, clip.w, clip.h, PAT_CHECKER, T->desk_on, T->desk_off);
-    for (i = 0; i < A.nicons; i++) {
-        r = icon_bounds(i);
-        if (rect_intersect(&r, &r, &clip))
-            draw_icon(i);
+    /* If a window covers the whole area, start from it: drawing the desktop and the windows
+     * behind first only to cover them again would flash. */
+    for (first = NUM_WINS - 1; first >= 0; first--) {
+        i = A.z[first];
+        if (A.win[i].open && rect_intersect(&r, &A.win[i].r, &clip) && r.x == clip.x && r.y == clip.y &&
+            r.w == clip.w && r.h == clip.h)
+            break;
     }
-    for (k = 0; k < NUM_WINS; k++) {
+    if (first < 0) {
+        gfx_pattern(clip.x, clip.y, clip.w, clip.h, PAT_CHECKER, T->desk_on, T->desk_off);
+        for (i = 0; i < A.nicons; i++) {
+            r = icon_bounds(i);
+            if (rect_intersect(&r, &r, &clip))
+                draw_icon(i);
+        }
+        first = 0;
+    }
+    for (k = first; k < NUM_WINS; k++) {
         i = A.z[k];
         r = window_bounds(i);
         if (A.win[i].open && rect_intersect(&r, &r, &clip))

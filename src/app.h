@@ -22,7 +22,7 @@
 #define MAX_ROWS 160 /* files a directory window lists */
 #define DIR_WINS 4     /* folder windows: 0 to 3 */
 #define NUM_WINS 6
-#define MAX_ICONS 28   /* a drive each, the games and the trash */
+#define MAX_ICONS 27   /* a drive each, and the games */
 #define NUM_MENUS 6    /* on the menu bar */
 #define CONTEXT_MENU NUM_MENUS /* the right-click menu, after them */
 #define GAMES_WIN 4    /* the games list's window */
@@ -58,7 +58,7 @@ typedef struct WinParts {
     int visible; /* list rows that fit */
 } WinParts;
 
-enum { ICON_FLOPPY, ICON_DISK, ICON_CDROM, ICON_NETWORK, ICON_GAMES, ICON_TRASH };
+enum { ICON_FLOPPY, ICON_DISK, ICON_CDROM, ICON_NETWORK, ICON_GAMES };
 
 typedef struct Icon {
     char label[8];
@@ -140,6 +140,7 @@ Rect icon_bounds(int i);            /* icon and label */
 void draw_icon(int i);
 Rect menu_rect(int m);              /* with its shadow */
 void draw_menu(int m);
+void draw_menu_item(int m, int i);
 int menu_title_at(int x, int y);
 int menu_item_at(int m, int x, int y);
 void alert_layout(void);

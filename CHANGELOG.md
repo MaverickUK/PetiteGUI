@@ -2,6 +2,16 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.1] - 2026-11-26
+
+### Changed
+
+- **Less flicker.** Moving through a menu redraws only the two items the highlight leaves and reaches, not the whole menu; selecting a row redraws only the two rows that change, not the window; and any redraw that falls inside one window starts from that window, rather than drawing the desktop and the windows behind it first, only to cover them. All of it is less drawing, so it's quicker too.
+
+### Removed
+
+- **The Trash.** It did nothing (deleting doesn't keep anything to get back); the drive icons now go five to a column.
+
 ## [0.8.0] - 2026-11-26
 
 Looking after files: the second step of the [roadmap](ROADMAP.md).
@@ -141,6 +151,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.8.1]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.1
 [0.8.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.0
 [0.7.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.7.0
 [0.6.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.6.0

@@ -174,14 +174,14 @@ static void sort_windows(void)
     }
 }
 
-/* An icon for each drive, then the games, in columns from the right; the trash below. */
+/* An icon for each drive, then the games, in columns of five from the right. */
 static void layout_icons(void)
 {
     Drive d[MAX_DRIVES];
     int n = drives_find(d), i, k = 0, col = 0, row = 0;
     Icon *ic;
 
-    for (i = 0; i < n && k < MAX_ICONS - 2; i++, k++) {
+    for (i = 0; i < n && k < MAX_ICONS - 1; i++, k++) {
         ic = &A.icon[k];
         sprintf(ic->label, "%c:", d[i].letter);
         ic->drive = d[i].letter;
@@ -194,17 +194,12 @@ static void layout_icons(void)
     for (i = 0; i < k; i++) {
         A.icon[i].x = SCREEN_W - 44 - col * 56;
         A.icon[i].y = MENU_H + 12 + row * 36;
-        if (++row >= (col == 0 ? 3 : 4)) { /* the first column leaves room for the trash */
+        if (++row >= 5) {
             row = 0;
             col++;
         }
     }
-    strcpy(A.icon[k].label, "Trash");
-    A.icon[k].kind = ICON_TRASH;
-    A.icon[k].drive = 0;
-    A.icon[k].x = SCREEN_W - 44;
-    A.icon[k].y = SCREEN_H - 42;
-    A.nicons = k + 1;
+    A.nicons = k;
     A.sel_icon = -1;
 }
 
@@ -460,11 +455,16 @@ static void close_menu(void)
 
 static void set_hot(int hot)
 {
-    if (hot == A.hot)
+    int old = A.hot;
+
+    if (hot == old)
         return;
     A.hot = hot;
     mouse_hide();
-    draw_menu(A.open_menu);
+    if (old >= 0)
+        draw_menu_item(A.open_menu, old);
+    if (hot >= 0)
+        draw_menu_item(A.open_menu, hot);
     mouse_show();
 }
 
@@ -568,10 +568,20 @@ static void close_window(int i)
         redraw_window(f); /* now active */
 }
 
+/* A list row's rectangle in window i (clipped to the list when it's drawn) */
+static Rect row_rect(int i, const WinParts *p, int k)
+{
+    return rect_make(p->list.x, p->list.y + 1 + (k - A.win[i].top) * ROW_H, p->list.w, ROW_H);
+}
+
+/* Select a row, scrolling to it. Unless the list scrolls, only the two rows that change are
+ * redrawn, not the window (which would flash). */
 static void select_row(int i, int k)
 {
     Win *w = &A.win[i];
     WinParts p;
+    int old = w->sel, top = w->top;
+    Rect r;
 
     if (k < 0 || k >= w->nrows)
         return;
@@ -581,7 +591,16 @@ static void select_row(int i, int k)
         w->top = k;
     if (k >= w->top + p.visible)
         w->top = k - p.visible + 1;
-    redraw_window(i);
+    if (w->top != top || front_window() != i || w->kind == WIN_EDIT) {
+        redraw_window(i);
+        return;
+    }
+    if (old >= 0 && old != k && old - w->top >= 0 && old - w->top <= p.visible) {
+        r = row_rect(i, &p, old);
+        redraw(&r);
+    }
+    r = row_rect(i, &p, k);
+    redraw(&r);
 }
 
 static void scroll_by(int i, int d)
@@ -915,8 +934,6 @@ static void open_icon(int i)
         open_games();
     else if (A.icon[i].drive)
         open_drive(A.icon[i].drive);
-    else
-        show_alert("The trash is empty.", "", "OK", NULL, CMD_NONE);
 }
 
 /* ---- Directory windows ---- */
@@ -2291,6 +2308,7 @@ static int shot(int scene, const char *path)
 
     draw_desktop(&FULL);
     if (scene == 1) {
+        select_row(1, find_row(1, "PETITE.CFG")); /* so Delete is there to highlight */
         open_menu(FILE_MENU);
         set_hot(FILE_DELETE);
     } else if (scene == 2) {
