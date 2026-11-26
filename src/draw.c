@@ -3,6 +3,7 @@
 #include <string.h>
 #include "app.h"
 #include "edit.h"
+#include "gamecols.h"
 #include "games.h"
 #include "gfx.h"
 #include "util.h"
@@ -370,6 +371,11 @@ void window_parts(int i, WinParts *p)
     top = iy + TITLE_H + 1;
     p->info = rect_make(ix, top, iw, ROW_H + 1);
     top += ROW_H + 2;
+    p->header = rect_make(ix, top, 0, 0);
+    if (A.win[i].kind == WIN_GAMES) {
+        p->header = rect_make(ix, top, iw, ROW_H + 1);
+        top += ROW_H + 2;
+    }
     p->scroll = rect_make(ix + iw - SCROLL_W, top, SCROLL_W, bottom - top);
     p->up = rect_make(p->scroll.x + 1, top, SCROLL_W - 1, ARROW_H);
     p->down = rect_make(p->scroll.x + 1, bottom - ARROW_H, SCROLL_W - 1, ARROW_H);
@@ -406,6 +412,71 @@ static void draw_scrollbar(const Win *w, const WinParts *p, int active)
 enum { ROW_FILE, ROW_DIR, ROW_GAME };
 
 /* A row's name, right-hand column (size or year) and icon. */
+#define NAME_X(p) ((p)->list.x + 8 + 16 + 8) /* after the icon */
+#define MIN_NAME 12
+
+unsigned games_layout(const WinParts *p, int *col_x, int *name_chars)
+{
+    unsigned shown = S.game_cols;
+    int c, used, avail = (p->list.x + p->list.w - 8 - NAME_X(p)) / 8, x;
+
+    for (;;) {
+        used = 0;
+        for (c = 0; c < NUM_COLS; c++)
+            if (shown & (1u << c))
+                used += game_columns[c].width + 2;
+        if (avail - used >= MIN_NAME || shown == 0)
+            break;
+        for (c = NUM_COLS - 1; c >= 0 && !(shown & (1u << c)); c--)
+            ;
+        shown &= ~(1u << c); /* too many: drop the rightmost */
+    }
+    *name_chars = avail - used;
+    x = NAME_X(p) + *name_chars * 8 + 16;
+    for (c = 0; c < NUM_COLS; c++) {
+        col_x[c] = -1;
+        if (shown & (1u << c)) {
+            col_x[c] = x;
+            x += (game_columns[c].width + 2) * 8;
+        }
+    }
+    return shown;
+}
+
+int games_heading_at(const WinParts *p, int x)
+{
+    int col_x[NUM_COLS], name_chars, c;
+
+    games_layout(p, col_x, &name_chars);
+    for (c = NUM_COLS - 1; c >= 0; c--)
+        if (col_x[c] >= 0 && x >= col_x[c] - 8)
+            return c;
+    return x >= p->list.x ? COL_NAME : -2;
+}
+
+/* The Games window's headings; the column it's sorted by is highlighted. */
+static void draw_headings(const WinParts *p)
+{
+    int col_x[NUM_COLS], name_chars, c, sorted = games_sort_column(), x, w;
+    const char *title;
+
+    games_layout(p, col_x, &name_chars);
+    gfx_fill(p->header.x, p->header.y, p->header.w, p->header.h, T->menu_bg);
+    for (c = COL_NAME; c < NUM_COLS; c++) {
+        if (c != COL_NAME && col_x[c] < 0)
+            continue;
+        title = c == COL_NAME ? "Name" : game_columns[c].title;
+        x = c == COL_NAME ? NAME_X(p) : col_x[c];
+        if (c != COL_NAME && game_columns[c].right)
+            x += (game_columns[c].width - (int)strlen(title)) * 8;
+        w = gfx_text_w(title);
+        if (c == sorted)
+            gfx_fill(x - 4, p->header.y, w + 8, p->header.h, T->sel);
+        gfx_text(x, p->header.y + 1, title, c == sorted ? T->sel_text : T->menu_text, 0);
+    }
+    hline(p->header.x, p->header.y + p->header.h, p->header.w, T->frame);
+}
+
 static void row_text(const Win *w, int k, char *name, char *right, int *kind)
 {
     if (w->kind == WIN_GAMES) {
@@ -468,6 +539,51 @@ static void draw_editor(const Win *w, const WinParts *p, int active)
             buf[0] = text[col];
             buf[1] = '\0';
             gfx_text(x0 + col * 8, ry, buf, T->sel_text, 0);
+        }
+    }
+    gfx_set_clip(&old_clip);
+}
+
+/* The Games window's rows: the icon, the name, then the columns chosen. */
+static void draw_game_rows(const Win *w, const WinParts *p)
+{
+    int col_x[NUM_COLS], name_chars, c, k, ry, x;
+    unsigned shown = games_layout(p, col_x, &name_chars);
+    char text[40];
+    Rect old_clip, list;
+    uint8_t col;
+    Game g;
+
+    old_clip = gfx_get_clip();
+    rect_intersect(&list, &p->list, &old_clip);
+    if (rect_empty(&list))
+        return;
+    gfx_set_clip(&list);
+    for (k = w->top; k < w->nrows && k - w->top <= p->visible; k++) {
+        int sel = k == w->sel;
+
+        games_get(k, &g);
+        ry = p->list.y + 2 + (k - w->top) * ROW_H;
+        if (ry > list.y + list.h || ry + ROW_H < list.y)
+            continue;
+        if (sel)
+            gfx_fill(p->list.x, ry - 1, p->list.w, ROW_H, T->sel);
+        col = sel ? T->sel_text : T->text;
+        gfx_mask(p->list.x + 8, ry, game_fill, ICON_ROWS, 16, sel ? T->sel : T->file_fill);
+        gfx_mask(p->list.x + 8, ry, game_line, ICON_ROWS, 16, sel ? T->sel_text : T->file_line);
+        if ((int)strlen(g.name) > name_chars)
+            g.name[name_chars] = '\0';
+        gfx_text(NAME_X(p), ry, g.name, col, 0);
+        for (c = 0; c < NUM_COLS; c++) {
+            if (!(shown & (1u << c)))
+                continue;
+            gc_text(&g, c, text);
+            if ((int)strlen(text) > game_columns[c].width)
+                text[game_columns[c].width] = '\0';
+            x = col_x[c];
+            if (game_columns[c].right)
+                x += (game_columns[c].width - (int)strlen(text)) * 8;
+            gfx_text(x, ry, text, col, 0);
         }
     }
     gfx_set_clip(&old_clip);
@@ -548,12 +664,15 @@ void draw_window(int i)
 
     draw_scrollbar(w, &p, active);
 
-    /* Rows, clipped to the list. The right column (sizes, years) shows if it fits beside
-     * the widest name; names too long for the space are cut short. */
     if (w->kind == WIN_GAMES) {
-        name_w = 20 * 8;
-        right_w = 4 * 8;
-    } else {
+        draw_headings(&p);
+        draw_game_rows(w, &p);
+        return;
+    }
+
+    /* Rows, clipped to the list. The right column (sizes) shows if it fits beside the widest
+     * name; names too long for the space are cut short. */
+    {
         for (k = 0; k < w->nrows; k++) {
             name_w = imax(name_w, gfx_text_w(w->rows[k].name));
             fmt_thousands(w->rows[k].size, buf);

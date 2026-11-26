@@ -2,6 +2,21 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.5.0] - 2026-11-26
+
+Columns in the Games window.
+
+### Added
+
+- **Choose the Games window's columns** in the Games menu: Year, Genre, Developer, Type, Video, Sound, Memory needed, Times played, Last played and Time played, besides the name. They're kept in `PETITE.CFG` (`gamecolumns:year,genre,plays`); Year alone to start with. The window widens to fit them, up to the screen; any that still don't fit beside a 12-character name are left off from the right.
+- **Headings**, and a click on one sorts by it: names, text and years A to Z (blanks last), times played, time played, memory and the last played most first. The column it's sorted by is highlighted, and the selected game stays selected.
+- **Play stats in the index:** scanning reads each game's `!GM_LOG.TXT` too, and after a game runs from PetiteGUI its count, last date and time are read again, so the columns are up to date.
+
+### Changed
+
+- The games index holds every GameMinder detail now (index version 2: an older `PETITE.IDX` is rebuilt when the Games window next opens). In memory, the games' text is one pool of strings the records point into, so 500 games still fit.
+- The Game showcase saver reads it all from the index, opening no files.
+
 ## [0.4.0] - 2026-11-26
 
 Screensavers.
@@ -79,6 +94,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.5.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.5.0
 [0.4.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.4.0
 [0.3.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.2.0

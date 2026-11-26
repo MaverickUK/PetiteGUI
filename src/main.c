@@ -27,6 +27,7 @@
 #include "app.h"
 #include "edit.h"
 #include "files.h"
+#include "gamecols.h"
 #include "games.h"
 #include "gfx.h"
 #include "launch.h"
@@ -47,6 +48,7 @@ enum {
 };
 #define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
 #define CMD_SAVER_DELAY 400 /* + minutes */
+#define CMD_COLUMN 500 /* + COL_...: show or hide a Games window column */
 
 static MenuItem system_items[] = {
     { "About PetiteGUI...", NULL, 0, CMD_ABOUT },
@@ -89,7 +91,19 @@ static MenuItem games_items[] = {
     { "Game info...", "Ctrl+I", 0, CMD_INFO },
     { "", NULL, MI_SEP, 0 },
     { "Rescan", NULL, 0, CMD_RESCAN },
+    { "", NULL, MI_SEP, 0 },
+    { "Year", NULL, 0, CMD_COLUMN + COL_YEAR }, /* the columns, in gamecols.c's order */
+    { "Genre", NULL, 0, CMD_COLUMN + COL_GENRE },
+    { "Developer", NULL, 0, CMD_COLUMN + COL_DEVELOPER },
+    { "Type", NULL, 0, CMD_COLUMN + COL_TYPE },
+    { "Video", NULL, 0, CMD_COLUMN + COL_VIDEO },
+    { "Sound", NULL, 0, CMD_COLUMN + COL_SOUND },
+    { "Memory needed", NULL, 0, CMD_COLUMN + COL_MEMORY },
+    { "Times played", NULL, 0, CMD_COLUMN + COL_PLAYS },
+    { "Last played", NULL, 0, CMD_COLUMN + COL_LAST },
+    { "Time played", NULL, 0, CMD_COLUMN + COL_TIME },
 };
+#define GAMES_FIRST_COLUMN 8 /* the index of "Year" in games_items */
 static MenuItem saver_items[] = { /* in the order of savers[] in saver.c */
     { "Start now", NULL, 0, CMD_SAVER_NOW },
     { "", NULL, MI_SEP, 0 },
@@ -239,6 +253,12 @@ static void update_menus(void)
     file_context[2].flags = (uint8_t)(up ? MI_OFF : 0);
     file_items[8].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
     game_context[1].flags = (uint8_t)(game ? 0 : MI_OFF);
+    {
+        int c;
+
+        for (c = 0; c < NUM_COLS; c++)
+            games_items[GAMES_FIRST_COLUMN + c].flags = (uint8_t)(S.game_cols & (1u << c) ? MI_CHECK : 0);
+    }
     {
         int k;
 
@@ -425,6 +445,7 @@ static void show_alert2(const char *line1, const char *line2, const char *b0, co
 static void run(int cmd);
 static void launch_selected(int setup, int checked);
 static void open_row(int i);
+static void sort_games(int col);
 
 /* Close the alert: button is the one chosen, or -1 (Esc) for neither. The last button runs
  * the alert's command, and the first of two its other one. */
@@ -634,6 +655,11 @@ static void press_window(int i, int x, int y)
             run(CMD_CLOSE); /* the editor asks to save first */
     } else if (rect_contains(&p.title, x, y)) {
         drag_window(i, x, y);
+    } else if (w->kind == WIN_GAMES && rect_contains(&p.header, x, y)) {
+        k = games_heading_at(&p, x);
+        wait_release(&ux, &uy);
+        if (k != -2)
+            sort_games(k);
     } else if (rect_contains(&p.up, x, y)) {
         hold_arrow(i, -1);
     } else if (rect_contains(&p.down, x, y)) {
@@ -920,6 +946,73 @@ static void games_window_reset(void)
     w->top = 0;
 }
 
+/* Make the Games window wide enough for its columns (and a 20-character name), up to the
+ * screen. */
+static void fit_games_window(void)
+{
+    Win *w = &A.win[GAMES_WIN];
+    Rect before = window_bounds(GAMES_WIN);
+    int need = 2 + 32 + 20 * 8 + 8 + SCROLL_W, c;
+
+    for (c = 0; c < NUM_COLS; c++)
+        if (S.game_cols & (1u << c))
+            need += (game_columns[c].width + 2) * 8;
+    need = SNAP8_UP(need);
+    if (need < 432)
+        need = 432;
+    if (need > 624)
+        need = 624;
+    w->r.w = need;
+    if (w->r.x + need > 632)
+        w->r.x = SNAP8(632 - need);
+    if (w->r.x < 0)
+        w->r.x = 0;
+    if (w->open) {
+        redraw(&before);
+        redraw_window(GAMES_WIN);
+    }
+}
+
+static void toggle_column(int c)
+{
+    char list[80];
+
+    S.game_cols ^= 1u << c;
+    gc_format(S.game_cols, list);
+    settings_set("gamecolumns", list);
+    fit_games_window();
+    if (!A.win[GAMES_WIN].open)
+        open_games();
+}
+
+/* Sort the games by a heading, keeping the selected game selected. */
+static void sort_games(int col)
+{
+    Win *w = &A.win[GAMES_WIN];
+    char dir[67];
+    Game g;
+    int k;
+
+    dir[0] = '\0';
+    if (w->sel >= 0) {
+        games_get(w->sel, &g);
+        strcpy(dir, g.dir);
+    }
+    games_sort(col);
+    for (k = 0; dir[0] && k < games_count(); k++) {
+        games_get(k, &g);
+        if (strcmp(g.dir, dir) == 0) {
+            w->sel = k;
+            break;
+        }
+    }
+    w->top = 0;
+    if (w->sel >= 0)
+        select_row(GAMES_WIN, w->sel);
+    else
+        redraw_window(GAMES_WIN);
+}
+
 static void scan_now(void)
 {
     char blank[30];
@@ -990,6 +1083,8 @@ static unsigned run_game(const Game *g, const GameInfo *info, int setup)
     mouse_init();
     if (!games_load_index())
         games_window_reset();
+    else
+        games_refresh(g->dir); /* its play count and time */
     A.win[GAMES_WIN].nrows = games_count();
     draw_desktop(&FULL);
     mouse_show();
@@ -1152,7 +1247,9 @@ static void run(int cmd)
         start_saver(S.saver == SAVER_OFF ? SAVER_RANDOM : S.saver);
         break;
     default:
-        if (cmd >= CMD_SAVER_PICK)
+        if (cmd >= CMD_COLUMN && cmd < CMD_COLUMN + NUM_COLS)
+            toggle_column(cmd - CMD_COLUMN);
+        else if (cmd >= CMD_SAVER_PICK && cmd < CMD_COLUMN)
             choose_saver(cmd);
         break;
     case CMD_GAMES:
@@ -1603,6 +1700,7 @@ int main(int argc, char **argv)
     }
 
     app_init();
+    fit_games_window();
     A.has_ega = detect_ega();
     if (force == 2 && !A.has_ega) {
         printf("Ink needs an EGA or VGA card.\n");

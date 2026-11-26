@@ -118,6 +118,10 @@ check(len(base) == 1, "the stand-in game ran directly: %s KB free" % (base[0] if
 check("4 games in C:\\GAMES" in listing, "the scan found all 4 games, nested and nameless ones too")
 check("NONAME" in listing and "Deep Down" in listing, "a game with no name: is listed by its directory")
 check(index.count("\npath:") == 4 and "scanpath:C:\\GAMES" in index, "PETITE.IDX holds the 4 games")
+check("plays:3" in index and "minutes:175" in index and "last:2026/11/24" in index,
+      "PETITE.IDX has the play stats from a !GM_LOG.TXT")
+check("developer:Nobody Soft" in index and "type:Shareware" in index and "video:EGA" in index and "sound:AdLib" in index,
+      "PETITE.IDX has GameMinder's other details")
 check(len(run) == 3, "the game ran three times from PetiteGUI (EMS, the swap file, the Games window)")
 if base and len(run) >= 2:
     b = int(base[0])

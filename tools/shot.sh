@@ -33,7 +33,7 @@ shoot() { # look scene [saver steps]
     work=$(mktemp -d)
     cp build/PETITE.EXE "$work/"
     cp -R tests/dos/GAMES "$work/GAMES"
-    printf 'scanpath:C:\\GAMES\n' > "$work/PETITE.CFG"
+    printf 'scanpath:C:\\GAMES\ngamecolumns:year,genre,developer,plays,last,time\n' > "$work/PETITE.CFG"
     cat > "$work/shot.conf" <<EOF
 [sdl]
 output=surface

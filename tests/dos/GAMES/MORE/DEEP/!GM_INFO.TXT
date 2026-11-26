@@ -1,3 +1,8 @@
 name:Deep Down
 exec:DEEP.EXE
 year:1990
+genre:Adventure
+developer:Nobody Soft
+type:Shareware
+video:EGA
+sound:AdLib

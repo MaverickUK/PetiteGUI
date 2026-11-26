@@ -7,6 +7,7 @@
 #include "../src/gminfo.h"
 #include "../src/textbuf.h"
 #include "../src/saverlib.h"
+#include "../src/gamecols.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -334,6 +335,52 @@ static void test_segments(void)
     CHECK(sl_segments[8] == 0x7F && sl_segments[1] == 0x06 && sl_segments[0] == 0x3F);
 }
 
+static void test_gamecols(void)
+{
+    char out[80];
+    Game g;
+
+    CHECK(gc_parse("year,genre") == ((1u << COL_YEAR) | (1u << COL_GENRE)));
+    CHECK(gc_parse(" Plays , TIME,nonsense,last") == ((1u << COL_PLAYS) | (1u << COL_TIME) | (1u << COL_LAST)));
+    CHECK(gc_parse("none") == 0 && gc_parse("") == 0);
+    gc_format((1u << COL_TIME) | (1u << COL_YEAR), out);
+    CHECK(strcmp(out, "year,time") == 0);
+    gc_format(0, out);
+    CHECK(strcmp(out, "none") == 0);
+    CHECK(gc_parse("year,genre,developer,type,video,sound,memory,plays,last,time") == (1u << NUM_COLS) - 1);
+
+    gc_minutes(0, out);
+    CHECK(out[0] == '\0');
+    gc_minutes(45, out);
+    CHECK(strcmp(out, "45m") == 0);
+    gc_minutes(185, out);
+    CHECK(strcmp(out, "3h 05m") == 0);
+
+    memset(&g, 0, sizeof g);
+    gc_log_line(&g, ">2026/11/20 14:05");
+    gc_log_line(&g, "<35\r\n");
+    gc_log_line(&g, ">2026/11/24 09:00\n");
+    gc_log_line(&g, "<150");
+    gc_log_line(&g, "garbage");
+    CHECK(g.plays == 2 && g.minutes == 185 && strcmp(g.last, "2026/11/24") == 0);
+
+    strcpy(g.year, "1991");
+    g.memory_kb = 580;
+    gc_text(&g, COL_YEAR, out);
+    CHECK(strcmp(out, "1991") == 0);
+    gc_text(&g, COL_PLAYS, out);
+    CHECK(strcmp(out, "2") == 0);
+    gc_text(&g, COL_TIME, out);
+    CHECK(strcmp(out, "3h 05m") == 0);
+    gc_text(&g, COL_MEMORY, out);
+    CHECK(strcmp(out, "580K") == 0);
+    gc_text(&g, COL_GENRE, out);
+    CHECK(out[0] == '\0');
+    g.plays = 0;
+    gc_text(&g, COL_PLAYS, out);
+    CHECK(out[0] == '\0'); /* blank, not 0, for never played */
+}
+
 int main(void)
 {
     test_intersect();
@@ -351,6 +398,7 @@ int main(void)
     test_life();
     test_maze();
     test_segments();
+    test_gamecols();
     printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

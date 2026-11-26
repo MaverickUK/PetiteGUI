@@ -119,6 +119,12 @@ Each step is a frame, paced by the vertical retrace (port `3DAh` bit 3), so save
 - With `before:` or `after:`, the three run from one batch file (`PETITE.BAT`), the game with `CALL` if it's a batch file itself.
 - Each play adds `>yyyy/mm/dd hh:mm` to `!GM_LOG.TXT` as it starts and `<minutes` when it ends.
 
+Scanning also reads each game's `!GM_LOG.TXT`, so the index (`PETITE.IDX`, `key:value` like GameMinder's own cache) holds every detail and the play stats; after a game runs from PetiteGUI, its stats are read again and the index rewritten.
+
+In memory the list is two DOS blocks: a small record per game (offsets, the play count, minutes, memory), and one pool of all the games' text, which the records point into. Fixed-size fields for every detail would put 500 games well past a 64 KB segment; as strings they take what they need. Sorting compares the records and pool strings where they are (`_fstricmp`), copying nothing.
+
+The Games window's columns (`gamecols.c`, host tested) have a width in characters each; the window widens to fit those chosen, and any that still don't fit beside a 12-character name are left off from the right. A heading click sorts by it.
+
 The scan walks every directory under each `ScanPath` entry. `PETITE.IDX` records the `ScanPath` it was made for, so changing `ScanPath` makes the next open scan again.
 
 ## Next

@@ -33,7 +33,8 @@ CYCLES=max tools/run.sh   # flat out
 - after a game run from the Games window, the desktop is back;
 - the editor saves a typed line into a CR LF file, keeping CR LF, and leaves no temporary file;
 - every screensaver runs 60 steps in Paper and in Ink and returns, having drawn (Blank: having left the screen black);
-- `/SET` changes one setting and adds another, keeping the rest of `PETITE.CFG`.
+- `/SET` changes one setting and adds another, keeping the rest of `PETITE.CFG`;
+- the index holds the play stats from a `!GM_LOG.TXT` and GameMinder's other details.
 
 `KEEP=1 tools/dostest.sh` keeps the DOS drive it made, to look at.
 

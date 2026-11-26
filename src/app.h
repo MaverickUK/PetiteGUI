@@ -47,7 +47,7 @@ typedef struct Win {
 
 /* The parts of a window, worked out from its rectangle. */
 typedef struct WinParts {
-    Rect title, close, info, list, scroll, up, down, track;
+    Rect title, close, info, header, list, scroll, up, down, track; /* header: the Games window's */
     int visible; /* list rows that fit */
 } WinParts;
 
@@ -113,6 +113,12 @@ void draw_window(int i);
 Rect window_bounds(int i);          /* with its shadow */
 void window_parts(int i, WinParts *p);
 int front_window(void);             /* -1 if none open */
+/* The Games window's columns: where each shown one starts (col_x[COL_...]), and how many
+ * characters the name gets. Returns the columns that fit (those that don't are dropped from
+ * the right). */
+unsigned games_layout(const WinParts *p, int *col_x, int *name_chars);
+/* The heading under x in the Games window: a column, COL_NAME, or -2 for none. */
+int games_heading_at(const WinParts *p, int x);
 Rect icon_bounds(int i);            /* icon and label */
 void draw_icon(int i);
 Rect menu_rect(int m);              /* with its shadow */

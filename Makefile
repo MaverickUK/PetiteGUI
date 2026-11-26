@@ -25,7 +25,7 @@ export INCLUDE := $(WATCOM)/h
 # warnings; -zq: quiet.
 CFLAGS = -bt=dos -mm -0 -ox -w4 -zq
 
-SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c saverlib.c saver.c savers_fx.c savers_grid.c savers_info.c
+SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c saverlib.c saver.c savers_fx.c savers_grid.c savers_info.c gamecols.c
 # swapcore must come first: it has to be the first code in memory, so that everything after
 # it can be swapped out while a game runs (see src/swapcore.asm).
 OBJ = build/swapcore.obj $(patsubst %.c,build/%.obj,$(SRC))

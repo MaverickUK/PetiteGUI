@@ -14,7 +14,7 @@ A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the 
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
-**Status:** 0.4.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
+**Status:** 0.5.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
 ## Two looks, one desktop
 
@@ -41,7 +41,7 @@ Both share the layout, the widgets and the 8×8 BIOS font; only the colour table
 
 PetiteGUI reads the `!GM_INFO.TXT` file [GameMinder](https://github.com/MaverickUK/GameMinder) keeps in each game's directory, and runs games the way GameMinder does.
 
-- **The Games window** (the joystick icon, or Games › Show games, Ctrl+G) lists every game found under `ScanPath`, by name, with its year. The first time it opens it scans for `!GM_INFO.TXT` files and saves what it found in `PETITE.IDX`, so later opens are instant. **Games › Rescan** looks again.
+- **The Games window** (the joystick icon, or Games › Show games, Ctrl+G) lists every game found under `ScanPath`. Pick its columns in the Games menu: year, genre, developer, type, video, sound, memory needed, times played, last played and time played. Click a heading to sort by it. The first time it opens it scans for `!GM_INFO.TXT` files and saves what it found in `PETITE.IDX`, so later opens are instant. **Games › Rescan** looks again.
 - **Run a game** with a double-click, Enter or Games › Run (Games › Run setup for its `setup:` program). It uses the game's `exec:`, `before:` and `after:`; batch files go through `COMMAND.COM`.
 - **Nearly all your memory for the game:** while a game runs, PetiteGUI swaps itself out to EMS, or to a `SWAP.$$$` file if there's no EMS, leaving about 2 KB behind. In testing, a game got 581 KB with PetiteGUI swapped out, against 584 KB run straight from DOS. A game whose `memory:` won't fit gets a warning first.
 - **Play stats shared with GameMinder:** each play is logged to the game's `!GM_LOG.TXT` in GameMinder's format, so GameMinder's counts and times include it.
@@ -54,6 +54,7 @@ useems:true
 playstats:true
 saver:random
 saverdelay:5
+gamecolumns:year,genre,plays
 ```
 
 `saver` is `off`, `random`, `cycle`, `blank`, `stars`, `lines`, `maze`, `melt`, `life`, `games` or `clock`; the Saver menu sets it and `saverdelay` (minutes) for you.

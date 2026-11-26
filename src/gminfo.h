@@ -22,6 +22,9 @@ typedef struct GameInfo {
     char year[5];
     char genre[17];
     char developer[33];
+    char type[17];
+    char video[17];
+    char sound[17];
     unsigned memory_kb; /* 0 if not given */
 } GameInfo;
 

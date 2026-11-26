@@ -9,12 +9,22 @@
 #define GAMES_H
 
 #define MAX_GAMES 500
+#define GAMES_POOL 60000u /* bytes for all the games' text */
 
+/* A game as callers see it: copied out of the list (games_get). */
 typedef struct Game {
     char name[33];
     char year[5];
     char genre[17];
-    char dir[67]; /* ends with a backslash */
+    char developer[33];
+    char type[17];
+    char video[17];
+    char sound[17];
+    char dir[67];   /* ends with a backslash */
+    char last[11];  /* the last play's date, as GameMinder logs it: 2026/11/20 */
+    unsigned memory_kb;
+    unsigned plays;
+    unsigned long minutes;
 } Game;
 
 typedef struct Settings {
@@ -25,6 +35,7 @@ typedef struct Settings {
     char temp_dir[80];   /* %TEMP%, else exe_dir: the swap file and launch batch file */
     int saver;           /* a saver's index, SAVER_OFF or SAVER_RANDOM (saver.h) */
     int saver_delay;     /* minutes without input before it starts */
+    unsigned game_cols;  /* the Games window's columns besides the name (gamecols.h) */
 } Settings;
 
 extern Settings S;
@@ -44,6 +55,11 @@ int games_load_index(void);
  * Returns the number of games, or -1 if there's no memory for the list. */
 int games_scan(void (*progress)(const char *dir, int found));
 void games_get(int k, Game *out);
+/* Sort by a column (gamecols.h), or COL_NAME. */
+void games_sort(int col);
+int games_sort_column(void);
+/* Read a game's !GM_LOG.TXT again (after it's been played) and save the index. */
+void games_refresh(const char *dir);
 /* Free the list's memory (before running a game). */
 void games_free(void);
 

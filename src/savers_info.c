@@ -15,47 +15,17 @@ static int imax(int a, int b)
 
 /* ---- Game showcase: a game from your collection every seven seconds ----
  *
- * Its name, what it is, and how much you've played it, from GameMinder's !GM_INFO.TXT and
- * !GM_LOG.TXT. It reads the games index; it never scans. */
+ * Its name, what it is, and how much you've played it, all from the games index (which has
+ * GameMinder's details and play log for each). It never scans. */
 
 static unsigned long show_next;
 
-/* Plays, the last one's date, and minutes in all, from !GM_LOG.TXT. */
-static void read_plays(const char *dir, int *plays, char *last, long *minutes)
-{
-    char path[GM_PATH_MAX + 16], line[64];
-    FILE *f;
-    size_t n;
-
-    *plays = 0;
-    *minutes = 0;
-    last[0] = '\0';
-    sprintf(path, "%s%s", dir, GM_LOG_FILE);
-    f = fopen(path, "r");
-    if (f == NULL)
-        return;
-    while (fgets(line, sizeof line, f) != NULL) {
-        n = strlen(line);
-        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r'))
-            line[--n] = '\0';
-        if (line[0] == '>') {
-            (*plays)++;
-            strncpy(last, line + 1, 10); /* the date: 2026/11/20 */
-            last[10] = '\0';
-        } else if (line[0] == '<') {
-            *minutes += atol(line + 1);
-        }
-    }
-    fclose(f);
-}
-
 static void show_game(void)
 {
-    char lines[3][48], last[16];
+    char lines[3][48];
     const char *name;
-    int k, plays, i, w, h, x, y;
+    int k, i, w, h, x, y;
     long minutes;
-    GameInfo info;
     Game g;
 
     sv_clear();
@@ -66,23 +36,21 @@ static void show_game(void)
     } else {
         k = (int)sl_rand_n((unsigned)games_count());
         games_get(k, &g);
-        memset(&info, 0, sizeof info);
-        launch_read_info(g.dir, &info);
         name = g.name;
         lines[0][0] = '\0';
         if (g.genre[0])
             strcat(lines[0], g.genre);
         if (g.year[0])
             sprintf(lines[0] + strlen(lines[0]), "%s%s", lines[0][0] ? ", " : "", g.year);
-        if (info.developer[0])
-            sprintf(lines[0] + strlen(lines[0]), "%s%.30s", lines[0][0] ? ", " : "", info.developer);
-        read_plays(g.dir, &plays, last, &minutes);
-        if (plays == 0)
+        if (g.developer[0])
+            sprintf(lines[0] + strlen(lines[0]), "%s%.30s", lines[0][0] ? ", " : "", g.developer);
+        minutes = (long)g.minutes;
+        if (g.plays == 0)
             strcpy(lines[1], "Not played yet");
-        else if (plays == 1)
-            sprintf(lines[1], "Played once, on %s", last);
+        else if (g.plays == 1)
+            sprintf(lines[1], "Played once, on %s", g.last);
         else
-            sprintf(lines[1], "Played %d times, last on %s", plays, last);
+            sprintf(lines[1], "Played %u times, last on %s", g.plays, g.last);
         if (minutes >= 60)
             sprintf(lines[2], "%ld hour%s %ld minute%s in all", minutes / 60, minutes / 60 == 1 ? "" : "s",
                     minutes % 60, minutes % 60 == 1 ? "" : "s");

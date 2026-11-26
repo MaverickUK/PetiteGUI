@@ -62,6 +62,12 @@ void gm_apply(GameInfo *g, const char *key, const char *value)
         copy_str(g->genre, sizeof g->genre, value);
     else if (strcmp(key, "DEVELOPER") == 0)
         copy_str(g->developer, sizeof g->developer, value);
+    else if (strcmp(key, "TYPE") == 0)
+        copy_str(g->type, sizeof g->type, value);
+    else if (strcmp(key, "VIDEO") == 0)
+        copy_str(g->video, sizeof g->video, value);
+    else if (strcmp(key, "SOUND") == 0)
+        copy_str(g->sound, sizeof g->sound, value);
     else if (strcmp(key, "MEMORY") == 0)
         g->memory_kb = (unsigned)atoi(value);
 }
