@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CGA &amp; EGA GUI Studies</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Layout: a bench of four CRTs, each mockup drawn pixel by pixel at its real mode and shown at 4:3; specs under each, the build approach below. */
+:root{
+  --bg:#E8EBEF; --fg:#191C23; --muted:#596070; --card:#F6F7F9; --line:#D0D5DD;
+  --accent:#0000AA; --accent-fg:#FFFFFF; --chip:#DDE1F3;
+  --bezel:#2B2A27; --bezel-hi:#3B3A36; --bezel-lo:#1D1C1A; --led:#55FF55;
+  --f-display:"VT323",ui-monospace,monospace;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101216; --fg:#E3E6EC; --muted:#9BA2AF; --card:#171A20; --line:#2A2F39;
+  --accent:#7B7BFF; --accent-fg:#0B0C10; --chip:#22264A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101216; --fg:#E3E6EC; --muted:#9BA2AF; --card:#171A20; --line:#2A2F39;
+  --accent:#7B7BFF; --accent-fg:#0B0C10; --chip:#22264A; color-scheme:dark}
+
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1240px;margin:0 auto;padding-block:40px 64px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:grid;gap:12px;margin-bottom:28px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(44px,7vw,72px);line-height:.95;margin:0;text-wrap:balance}
+.lede{max-width:68ch;margin:0;color:var(--muted)}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 24px}
+.controls span{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--card)}
+.seg button{font:500 14px var(--f-body);color:var(--fg);background:transparent;border:0;padding:8px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+
+.bench{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,500px),1fr));gap:28px}
+.study{display:grid;gap:14px;min-width:0}
+.crt{background:linear-gradient(var(--bezel-hi),var(--bezel) 30%,var(--bezel-lo));border-radius:14px;padding:clamp(10px,2.4vw,22px) clamp(10px,2.4vw,22px) clamp(22px,3.6vw,34px);position:relative;box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
+.crt::after{content:"";position:absolute;right:clamp(14px,3vw,26px);bottom:clamp(9px,1.4vw,13px);width:7px;height:7px;border-radius:50%;background:var(--led);box-shadow:0 0 6px var(--led)}
+.crt canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;border-radius:6px}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px}
+h2{font-family:var(--f-display);font-weight:400;font-size:38px;line-height:1;margin:0}
+.mode{font-family:var(--f-mono);font-size:12.5px;background:var(--chip);color:var(--fg);padding:3px 8px;border-radius:4px}
+.study ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.study li{max-width:70ch}
+.foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.sw{display:inline-flex;align-items:center;gap:5px}
+.sw i{width:14px;height:14px;border-radius:2px;border:1px solid var(--line);display:inline-block}
+
+section.approach{margin-top:56px;display:grid;gap:18px;border-top:1px solid var(--line);padding-top:32px}
+section.approach h2{font-size:44px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:28px}
+.cols > div{min-width:0}
+h3{font-family:var(--f-body);font-size:16px;font-weight:600;margin:0 0 8px}
+ol.steps{margin:0;padding-left:22px;display:grid;gap:10px}
+ol.steps li{max-width:68ch}
+.basics{margin:0;padding-left:18px;display:grid;gap:4px}
+code{font-family:var(--f-mono);font-size:.88em}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums;min-width:640px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td.n{text-align:right}
+.note{color:var(--muted);font-size:14px;max-width:80ch;margin:0}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Style studies · the basics only</div>
+    <h1>A desktop for CGA and EGA</h1>
+    <p class="lede">Four looks for the same small desktop: a menu bar, two windows, icons, a drop-down menu, an alert and the mouse pointer. Each is drawn at its mode's real resolution and palette, then shown at 4:3 as a CRT would stretch it.</p>
+  </header>
+
+  <div class="controls">
+    <span>Show</span>
+    <div class="seg" role="group" aria-label="Scene">
+      <button type="button" id="sc0" data-scene="0" aria-pressed="false">Desktop</button>
+      <button type="button" id="sc1" data-scene="1" aria-pressed="true">Menu open</button>
+      <button type="button" id="sc2" data-scene="2" aria-pressed="false">Alert</button>
+    </div>
+  </div>
+
+  <div class="bench">
+    <article class="study">
+      <div class="crt"><canvas id="cv-paper" aria-label="Paper: black and white desktop mockup"></canvas></div>
+      <div class="head"><h2>Paper</h2><span class="mode">CGA · mode 06h · 640×200 · 2 colours</span></div>
+      <ul>
+        <li>Black and white, with a 50% dither for grey: the desktop, the scroll track, disabled menu items.</li>
+        <li>A striped title bar marks the active window. Drop shadows and a double-bordered alert add depth without colour.</li>
+        <li>Runs on every CGA, EGA and VGA card. The same 1-bit code would carry over to a Hercules card (720×348).</li>
+        <li>8×8 text, 80 columns. The font is already in the BIOS ROM.</li>
+      </ul>
+      <div class="foot"><span>16,000 bytes a screen · 8 pixels a byte</span><div class="swatches" id="sw-paper"></div></div>
+    </article>
+
+    <article class="study">
+      <div class="crt"><canvas id="cv-arcade" aria-label="Arcade: four-colour desktop mockup"></canvas></div>
+      <div class="head"><h2>Arcade</h2><span class="mode">CGA · mode 04h · 320×200 · 4 colours</span></div>
+      <ul>
+        <li>Palette 1, with colour 0 set to blue instead of black. On CGA, colour 0 in this mode can be any of the 16 colours.</li>
+        <li>Solid title bars take the place of Paper's stripes: magenta for the active window, cyan for the rest.</li>
+        <li>40 columns of 8×8 text, so a window shows about 20 characters: lists suit it better than icon grids, and file sizes drop out where they don't fit.</li>
+        <li>Pixels are nearly square (1.2:1), so icons are easy to draw. It feels more like a game's menus than an office desktop.</li>
+      </ul>
+      <div class="foot"><span>16,000 bytes a screen · 4 pixels a byte</span><div class="swatches" id="sw-arcade"></div></div>
+    </article>
+
+    <article class="study">
+      <div class="crt"><canvas id="cv-ink" aria-label="Ink: sixteen-colour 640 by 200 desktop mockup"></canvas></div>
+      <div class="head"><h2>Ink</h2><span class="mode">EGA · mode 0Eh · 640×200 · 16 colours</span></div>
+      <ul>
+        <li>Paper's layout and widgets in colour: the same pixel grid, the same 8×8 font and the same widget code, with a different palette table.</li>
+        <li>Works on a 64 KB EGA, the base card. Mode 10h's 16 colours need more memory than that.</li>
+        <li>Colour shows state: a blue title for the active window, yellow folders, grey for disabled items.</li>
+      </ul>
+      <div class="foot"><span>64,000 bytes a screen, in four planes</span><div class="swatches" id="sw-ink"></div></div>
+    </article>
+
+    <article class="study">
+      <div class="crt"><canvas id="cv-bevel" aria-label="Bevel: sixteen-colour 640 by 350 desktop mockup"></canvas></div>
+      <div class="head"><h2>Bevel</h2><span class="mode">EGA · mode 10h · 640×350 · 16 colours</span></div>
+      <ul>
+        <li>Bevels lit from the top left, in white, light grey and dark grey: buttons that look pressable and windows with thick frames.</li>
+        <li>8×14 text, 25 rows. Pixels are close to square (1.37:1), so detail stays sharp.</li>
+        <li>Needs a 128 KB EGA for 16 colours (a 64 KB card gets 4 in this mode). It also moves 75% more memory than Ink: slow on an 8088, fine on a 286.</li>
+      </ul>
+      <div class="foot"><span>112,000 bytes a screen, in four planes</span><div class="swatches" id="sw-bevel"></div></div>
+    </article>
+  </div>
+
+  <section class="approach">
+    <h2>How I'd approach it</h2>
+    <div class="cols">
+      <div>
+        <h3>The basics, and nothing else yet</h3>
+        <ul class="basics">
+          <li>A desktop with a pattern and a few icons</li>
+          <li>A menu bar with drop-down menus</li>
+          <li>Windows: a title bar, close box and scroll bar; focus, move and close</li>
+          <li>A modal alert with a default button</li>
+          <li>The mouse pointer</li>
+        </ul>
+        <p class="note" style="margin-top:14px">Every mockup is built from those parts and a handful of drawing calls, which is also roughly the first milestone's scope.</p>
+      </div>
+      <div>
+        <h3>Build order</h3>
+        <ol class="steps">
+          <li><strong>Paper first, at 640×200.</strong> Every CGA, EGA and VGA card has this mode, and 1-bit drawing is the easiest to make fast on an 8088. Ink then comes nearly free: the same layout, with a palette table and a planar driver.</li>
+          <li><strong>Byte-aligned windows.</strong> Keep window edges on 8-pixel columns (4 in Arcade). Fills, copies and text then work in whole bytes, with no shifting or masking. Every window in these mockups snaps that way.</li>
+          <li><strong>A small driver per mode.</strong> It needs fill rectangle, pattern fill, lines, draw text, and save and restore a rectangle, with one driver each for CGA 1-bit, CGA 2-bit and EGA planar. Widgets call only the driver.</li>
+          <li><strong>Redraw by rectangles.</strong> Draw windows back to front, clipped to the area that changed. A menu saves the pixels under it (Paper's File menu is under 2 KB) and puts them back when it closes.</li>
+          <li><strong>Let the mouse driver draw the pointer.</strong> INT 33h already draws it in modes 04h, 06h, 0Eh and 10h. Hide it (function 2), or hide it only over an area (function 10h), while drawing underneath. Set its shape per mode with function 9: 200-line modes need a squat arrow, as drawn here.</li>
+          <li><strong>Fonts from ROM to start with.</strong> In 200-line modes, use the 8×8 font at <code>F000:FA6E</code> (characters 128–255 come through INT 1Fh). In mode 10h, use the EGA's 8×14 font, found with INT 10h AX=1130h. A proportional font can come later.</li>
+          <li><strong>C with assembly where it counts.</strong> Use Turbo C or Open Watcom in the small or compact model, with the driver's inner loops in assembly.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Look</th><th>Mode</th><th>Pixels</th><th>Colours</th><th class="n">Bytes a screen</th><th>Text</th><th>Cards</th></tr></thead>
+        <tbody>
+          <tr><td>Paper</td><td>CGA 06h</td><td>640×200</td><td>2</td><td class="n">16,000</td><td>80×25, 8×8</td><td>CGA, EGA, VGA</td></tr>
+          <tr><td>Arcade</td><td>CGA 04h</td><td>320×200</td><td>4 (colour 0 free)</td><td class="n">16,000</td><td>40×25, 8×8</td><td>CGA, EGA, VGA</td></tr>
+          <tr><td>Ink</td><td>EGA 0Eh</td><td>640×200</td><td>16</td><td class="n">64,000</td><td>80×25, 8×8</td><td>EGA 64 KB+, VGA</td></tr>
+          <tr><td>Bevel</td><td>EGA 10h</td><td>640×350</td><td>16</td><td class="n">112,000</td><td>80×25, 8×14</td><td>EGA 128 KB+, VGA</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">CGA's two 200-line modes store even lines and odd lines in separate 8 KB banks, so a driver steps through rows in pairs. On a 4:3 screen, a 640×200 pixel is 2.4 times taller than it is wide, which is why the icons, close boxes and pointer are drawn short and wide in Paper and Ink.</p>
+  </section>
+</div>
+
+<script>
+(function(){
+const CGA16=['#000000','#0000AA','#00AA00','#00AAAA','#AA0000','#AA00AA','#AA5500','#AAAAAA','#555555','#5555FF','#55FF55','#55FFFF','#FF5555','#FF55FF','#FFFF55','#FFFFFF'];
+const CGA16N=['black','blue','green','cyan','red','magenta','brown','light grey','dark grey','light blue','light green','light cyan','light red','light magenta','yellow','white'];
+
+const FONTS={
+  p2p:{family:'"Press Start 2P", ui-monospace, monospace',size:8,ch:8,padTop:0},
+  vt:{family:'VT323, ui-monospace, monospace',size:20,ch:16,padTop:2}
+};
+const gcan=document.createElement('canvas');gcan.width=gcan.height=48;
+const gctx=gcan.getContext('2d',{willReadFrequently:true});
+function prepFont(f){
+  gctx.font=f.size+'px '+f.family;
+  f.cw=Math.max(5,Math.round(gctx.measureText('M').width));
+  gctx.clearRect(0,0,48,48);gctx.textBaseline='alphabetic';gctx.fillStyle='#000';gctx.fillText('M',0,30);
+  const d=gctx.getImageData(0,0,48,48).data;let top=22;
+  outer:for(let r=0;r<48;r++)for(let q=0;q<48;q++)if(d[(r*48+q)*4+3]>110){top=r;break outer;}
+  f.base=30-top+f.padTop;f.cache=new Map();
+}
+function glyph(f,c){
+  let m=f.cache.get(c);if(m)return m;
+  gctx.font=f.size+'px '+f.family;gctx.textBaseline='alphabetic';gctx.fillStyle='#000';
+  gctx.clearRect(0,0,48,48);gctx.fillText(c,0,f.base);
+  const d=gctx.getImageData(0,0,f.cw,f.ch).data;m=new Uint8Array(f.cw*f.ch);
+  for(let i=0;i<m.length;i++)m[i]=d[i*4+3]>110?1:0;
+  f.cache.set(c,m);return m;
+}
+
+class Screen{
+  constructor(W,H){this.W=W;this.H=H;this.b=new Uint8Array(W*H);this.noClip();}
+  setClip(x,y,w,h){this.k=[Math.max(0,x),Math.max(0,y),Math.min(this.W,x+w),Math.min(this.H,y+h)];}
+  noClip(){this.k=[0,0,this.W,this.H];}
+  px(x,y,c){const k=this.k;if(x<k[0]||y<k[1]||x>=k[2]||y>=k[3])return;this.b[y*this.W+x]=c;}
+  paint(x,y,w,h,c){const fn=typeof c==='function';for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)this.px(i,j,fn?c(i,j):c);}
+  fill(x,y,w,h,c){this.paint(x,y,w,h,c);}
+  hl(x,y,w,c){this.paint(x,y,w,1,c);} vl(x,y,h,c){this.paint(x,y,1,h,c);}
+  rect(x,y,w,h,c){this.hl(x,y,w,c);this.hl(x,y+h-1,w,c);this.vl(x,y,h,c);this.vl(x+w-1,y,h,c);}
+}
+function text(S,f,x,y,s,c,o){
+  let cx=x;
+  for(const ch of s){const m=glyph(f,ch);
+    for(let r=0;r<f.ch;r++)for(let q=0;q<f.cw;q++)
+      if(m[r*f.cw+q]&&(!o||!o.dither||((cx+q+y+r)&1)))S.px(cx+q,y+r,c);
+    cx+=f.cw;}
+}
+function bevel(S,x,y,w,h,face,hi,lo,dark,thick){
+  S.fill(x,y,w,h,face);S.hl(x,y,w-1,hi);S.vl(x,y,h-1,hi);S.hl(x,y+h-1,w,dark);S.vl(x+w-1,y,h,dark);
+  if(thick){S.hl(x+1,y+h-2,w-2,lo);S.vl(x+w-2,y+1,h-2,lo);S.hl(x+1,y+1,w-3,hi);S.vl(x+1,y+1,h-3,hi);}
+}
+function tri(S,cx,y0,n,dir,c,k){for(let r=0;r<n;r++){const rr=dir==='up'?r:n-1-r;S.hl(cx-rr*k,y0+r,2*rr*k+1,c);}}
+function bmp(S,rows,x,y,cols,xs,hT){
+  const n=rows.length;
+  for(let dy=0;dy<hT;dy++){const row=rows[Math.floor(dy*n/hT)];
+    for(let q=0;q<row.length;q++){const p=row[q];if(p==='.')continue;const c=p==='x'?cols[0]:cols[1];
+      for(let s=0;s<xs;s++)S.px(x+q*xs+s,y+dy,c);}}
+}
+const FOLDER=['.xxx....','xooxxxxx','xoooooox','xoooooox','xoooooox','xoooooox','xxxxxxxx'];
+const FILE=['xxxxx...','xooxox..','xooxxxx.','xooooox.','xooooox.','xooooox.','xxxxxxx.'];
+const ARROW=['x...........','xx..........','xox.........','xoox........','xooox.......','xoooox......','xooooox.....','xoooooox....','xooooooox...','xoooooooox..','xooooooooox.','xooooooxxxxx','xoooxoox....','xooxxoox....','xox..xoox...','xx...xoox...','x.....xoox..','......xoox..','.......xx...'];
+
+function drawIcon(S,I,k,x,y,w,h,X){
+  const R=Math.round;
+  if(k==='floppy'){
+    S.fill(x,y,w,h,I.FF);S.rect(x,y,w,h,I.L);
+    const sx=x+R(w*.28),sw=R(w*.44),sh=R(h*.38);S.fill(sx,y,sw,sh,I.shutter);S.rect(sx,y,sw,sh,I.L);
+    S.fill(sx+R(sw*.6),y+R(sh*.25),Math.max(1,R(sw*.16)),Math.max(1,R(sh*.5)),I.L);
+    const lx=x+R(w*.14),ly=y+R(h*.52),lw=w-2*(lx-x),lh=y+h-R(h*.08)-ly;S.fill(lx,ly,lw,lh,I.label);S.rect(lx,ly,lw,lh,I.L);
+    S.hl(lx+X(4),ly+R(lh*.45),lw-2*X(4),I.acc);
+  }else if(k==='hd'){
+    const by=y+R(h*.22),bh=R(h*.6);S.fill(x,by,w,bh,I.F);S.rect(x,by,w,bh,I.L);
+    S.hl(x,by+R(bh*.62),w,I.L);
+    S.fill(x+w-X(9),by+R(bh*.74),X(4),Math.max(1,R(bh*.14)),I.led);
+    S.hl(x+X(4),by+R(bh*.3),R(w*.5),I.acc);
+  }else{
+    S.fill(x+R(w*.15),y+R(h*.12),R(w*.7),Math.max(1,R(h*.08)),I.L);
+    S.rect(x+R(w*.4),y,R(w*.2),R(h*.14),I.L);
+    const bx=x+R(w*.22),bw=R(w*.56),bt=y+R(h*.24),bh=y+h-bt;S.fill(bx,bt,bw,bh,I.F);S.rect(bx,bt,bw,bh,I.L);
+    for(let i=1;i<4;i++)S.vl(bx+R(bw*i/4),bt+2,bh-4,I.acc);
+  }
+}
+
+function render(t,scene){
+  const f=FONTS[t.font],C=t.c,st=t.style,W=t.W,H=t.H,hi=H>200;
+  const S=new Screen(W,H);
+  const X=v=>Math.round(v*W/640),Y=v=>Math.round(v*H/200);
+  const snap=v=>Math.round(v/t.ppb)*t.ppb,snapUp=v=>Math.ceil(v/t.ppb)*t.ppb;
+  const cw=f.cw,ch=f.ch,rh=ch+(hi?3:1),tb=ch+(hi?6:3),mb=ch+(hi?6:3);
+  const T=(x,y,s,c,o)=>text(S,f,x,y,s,c,o),TW=s=>s.length*cw;
+  const ty=(top,h)=>top+Math.floor((h-ch+1)/2);
+  const pos={};
+
+  S.paint(0,0,W,H,C.desk);
+
+  // Menu bar
+  S.fill(0,0,W,mb,C.menuBg);S.hl(0,mb,W,C.menuLine);
+  const gap=cw*(W>320?2:1);let mx=X(8)+(gap>>1);
+  for(const m of ['System','File','View','Options']){
+    const w=TW(m),on=scene===1&&m==='File';
+    if(on)S.fill(mx-(gap>>1),0,w+gap,mb,C.sel);
+    T(mx,ty(0,mb),m,on?C.selText:C.menuText);pos[m]=mx;mx+=w+gap;
+  }
+  const clock='10:42';T(W-X(8)-TW(clock),ty(0,mb),clock,C.menuText);
+
+  // Desktop icons
+  const iw=X(40),ih=Y(18),icx=W-X(44);
+  for(const [k,l,y] of [['floppy','A:',mb+Y(12)],['hd','C:',mb+Y(48)],['trash','Trash',H-Y(42)]]){
+    drawIcon(S,C.icon,k,icx-(iw>>1),y,iw,ih,X);
+    const lw=TW(l)+X(4)*2,lx=icx-(lw>>1),ly=y+ih+Y(2),lh=ch+(hi?3:2),sel=k==='hd';
+    if(sel)S.fill(lx,ly,lw,lh,C.sel);else if(C.labelBg!=null)S.fill(lx,ly,lw,lh,C.labelBg);
+    T(lx+X(4),ly+(hi?2:1),l,sel?C.selText:C.labelText);
+  }
+
+  function frame(x,y,w,h,act,title,closeBox){
+    if(st.shadow){S.fill(x+w,y+st.shadow[1],st.shadow[0],h,C.shadow);S.fill(x+st.shadow[0],y+h,w,st.shadow[1],C.shadow);}
+    let ix,iy,iw,ih;
+    if(st.frame==='bevel'){const bx=X(4),by=Y(2);bevel(S,x,y,w,h,C.face,C.hi,C.lo,C.frame,true);
+      ix=x+bx;iy=y+by;iw=w-2*bx;ih=h-2*by;S.rect(ix-1,iy-1,iw+2,ih+2,C.frame);S.fill(ix,iy,iw,ih,C.winBg);}
+    else{S.fill(x,y,w,h,C.winBg);S.rect(x,y,w,h,C.frame);ix=x+1;iy=y+1;iw=w-2;ih=h-2;}
+    const stripes=st.title==='stripes';
+    const tc=stripes?C.text:(act?C.titleOnText:C.titleOffText);
+    if(stripes){S.fill(ix,iy,iw,tb,C.winBg);if(act)for(let r=2;r<tb-2;r+=2)S.hl(ix+X(2),iy+r,iw-2*X(2),C.frame);}
+    else S.fill(ix,iy,iw,tb,act?C.titleOn:C.titleOff);
+    S.hl(ix,iy+tb,iw,C.frame);
+    const ttw=TW(title),tx=ix+((iw-ttw)>>1);
+    if(stripes&&act)S.fill(tx-cw,iy+1,ttw+2*cw,tb-2,C.winBg);
+    T(tx,ty(iy,tb),title,tc);
+    if(closeBox){
+      if(st.frame==='bevel'){
+        const bw=X(20);bevel(S,ix,iy,bw,tb,C.face,C.hi,C.lo,C.frame,false);S.vl(ix+bw,iy,tb,C.frame);
+        S.fill(ix+X(6),iy+(tb>>1)-1,bw-2*X(6),Math.max(2,Y(1)),C.frame);
+        const m2=ix+iw-bw;S.vl(m2-1,iy,tb,C.frame);bevel(S,m2,iy,bw,tb,C.face,C.hi,C.lo,C.frame,false);
+        const n=Math.round(tb*.28);tri(S,m2+(bw>>1),iy+((tb-n)>>1),n,'up',C.frame,t.triK);
+      }else if(!stripes||act){
+        const cbw=X(12),cbh=Math.round(cbw/t.pa),cx=ix+X(8),cy=iy+((tb-cbh)>>1);
+        if(stripes)S.fill(cx-X(3),iy+1,cbw+2*X(3),tb-2,C.winBg);
+        S.fill(cx,cy,cbw,cbh,stripes?C.winBg:(act?C.titleOn:C.titleOff));S.rect(cx,cy,cbw,cbh,tc);
+      }
+    }
+    return {ix,iy,iw,ih,top:iy+tb+1};
+  }
+
+  function win(o){
+    const r=frame(o.x,o.y,o.w,o.h,o.active,o.title,true);
+    const ix=r.ix,iw=r.iw,bottom=r.iy+r.ih;let top=r.top;
+    if(o.info){
+      S.fill(ix,top,iw,rh+1,C.infoBg??C.winBg);const it=ty(top,rh+1);
+      T(ix+X(8),it,o.info[0],C.text);
+      if(TW(o.info[0])+TW(o.info[1])+X(16)+cw*2<iw)T(ix+iw-X(8)-TW(o.info[1]),it,o.info[1],C.text);
+      top+=rh+1;S.hl(ix,top,iw,C.frame);top+=1;
+    }
+    const sbw=X(16),sx=ix+iw-sbw,ah=Math.round(sbw/t.pa);
+    S.vl(sx,top,bottom-top,C.frame);
+    if(o.active||st.title!=='stripes'){
+      S.paint(sx+1,top,sbw-1,bottom-top,C.track);
+      const btn=(by,dir)=>{
+        if(st.frame==='bevel')bevel(S,sx+1,by,sbw-1,ah,C.face,C.hi,C.lo,C.frame,false);else S.fill(sx+1,by,sbw-1,ah,C.winBg);
+        S.hl(sx,dir==='up'?by+ah:by-1,sbw,C.frame);
+        const n=Math.max(2,Math.round(ah*.45));tri(S,sx+((sbw+1)>>1),by+((ah-n)>>1),n,dir,C.frame,t.triK);
+      };
+      btn(top,'up');btn(bottom-ah,'down');
+      const thY=top+ah+Math.round(ah*.9),thH=Math.round(ah*1.6);
+      if(st.frame==='bevel')bevel(S,sx+1,thY,sbw-1,thH,C.face,C.hi,C.lo,C.frame,false);
+      else{S.fill(sx+1,thY,sbw-1,thH,C.thumb);S.rect(sx,thY-1,sbw,thH+2,C.frame);}
+    }else S.fill(sx+1,top,sbw-1,bottom-top,C.winBg);
+    const lw=iw-sbw,iconX=ix+X(8),nx=iconX+8*t.ixs+cw;
+    const maxN=Math.max(...o.rows.map(r=>TW(r[1]))),maxS=Math.max(...o.rows.map(r=>TW(r[2]||'')));
+    const showSz=nx+maxN+cw*2+maxS<=ix+lw-X(8);
+    S.setClip(ix,top,lw,bottom-top);
+    o.rows.forEach((row,i)=>{
+      const [k,n,sz,sel]=row,ry=top+Y(2)+i*rh+(hi?1:0);
+      if(sel)S.fill(ix,ry-1-(hi?1:0),lw,rh,C.sel);
+      const ic=sel?[C.selText,C.sel]:(k==='d'?C.folder:C.file);
+      bmp(S,k==='d'?FOLDER:FILE,iconX,ry,ic,t.ixs,ch-1);
+      const col=sel?C.selText:C.text;T(nx,ry,n,col);
+      if(sz&&showSz)T(ix+lw-X(8)-TW(sz),ry,sz,col);
+      if(o.id==='C'&&n==='GAMES')pos.games=[nx+TW(n)-cw,ry+(ch>>1)];
+    });
+    S.noClip();
+  }
+
+  win({x:snap(X(24)),y:mb+Y(14),w:snap(X(264)),h:Y(100),title:'A:\\',info:['3 items','291 KB free'],active:false,
+    rows:[['d','DRIVERS'],['f','INSTALL.EXE','24,576'],['f','SETUP.INI','412']]});
+  win({x:snap(X(176)),y:mb+Y(30),w:snap(X(336)),h:Y(122),title:'C:\\',info:['7 items','18,432 KB free'],active:true,id:'C',
+    rows:[['d','DOS'],['d','GAMES'],['d','SYNTH'],['f','AUTOEXEC.BAT','1,024'],['f','COMMAND.COM','54,645'],['f','CONFIG.SYS','512'],['f','README.TXT','3,210',1]]});
+
+  if(scene===1){
+    const items=[['Open','Ctrl+O'],['Info...','Ctrl+I'],['-'],['New folder','Ctrl+N'],['Copy...','Ctrl+C',1],['Delete...','Del'],['-'],['Quit','Ctrl+Q']];
+    const showSc=W>320,nameW=Math.max(...items.map(i=>TW(i[0]))),scW=showSc?Math.max(...items.map(i=>TW(i[1]||''))):0;
+    const mw=snapUp(X(8)*2+nameW+(showSc?cw*3+scW:0)),sepH=Math.max(3,Y(5)),pad=Math.max(1,Y(2));
+    let h=pad*2;items.forEach(i=>h+=i[0]==='-'?sepH:rh+1);
+    const x=snap(pos.File-(gap>>1)),y=mb;
+    if(st.shadow){S.fill(x+mw,y+st.shadow[1],st.shadow[0],h,C.shadow);S.fill(x+st.shadow[0],y+h,mw,st.shadow[1],C.shadow);}
+    else if(st.frame==='bevel'){S.fill(x+mw,y+Y(2),X(4),h,C.lo);S.fill(x+X(4),y+h,mw,Y(2),C.lo);}
+    S.fill(x,y,mw,h,C.menuBg);S.rect(x,y,mw,h,C.frame);
+    let cy=y+pad;
+    items.forEach((it,i)=>{
+      if(it[0]==='-'){S.paint(x+1,cy+(sepH>>1),mw-2,1,st.sepDither?((a)=>(a&1)?C.frame:C.menuBg):C.sepColor);cy+=sepH;return;}
+      const on=i===5,dis=it[2];if(on)S.fill(x+1,cy,mw-2,rh+1,C.sel);
+      const col=on?C.selText:(dis&&C.disabled!=null?C.disabled:C.menuText),o=dis&&C.disabled==null?{dither:1}:undefined;
+      T(x+X(8),ty(cy,rh+1),it[0],col,o);
+      if(showSc&&it[1])T(x+mw-X(8)-TW(it[1]),ty(cy,rh+1),it[1],col,o);
+      if(on)pos.menuItem=[x+X(8)+TW(it[0])-cw*2,cy+(rh>>1)];
+      cy+=rh+1;
+    });
+  }
+
+  if(scene===2){
+    const lines=['Delete README.TXT?',"It can't be undone."];
+    const titled=st.dialog==='titled';
+    const aw=snapUp(X(28)),ah=Math.round(aw/t.pa),pad=X(16),lineW=Math.max(...lines.map(TW));
+    const bh=ch+(hi?10:4),bw=Math.max(TW('Delete'),TW('Cancel'))+cw*2,bgap=X(16),vpad=Y(8);
+    let dw=snapUp(pad*2+aw+X(12)+lineW);dw=Math.max(dw,snapUp(pad*2+bw*2+bgap));
+    const body=Math.max(ah,lines.length*rh);
+    const head=titled?tb+1:0,edge=st.frame==='bevel'?Y(2)*2:Y(4)*2;
+    const dh=head+edge+vpad*3+body+bh;
+    const dx=snap((W-dw)/2),dy=Math.round((H-dh)/2)+Y(6);
+    let top;
+    if(titled){const r=frame(dx,dy,dw,dh,true,'Delete',false);top=r.top;S.fill(r.ix,top,r.iw,r.iy+r.ih-top,C.dlgBg);}
+    else{
+      if(st.shadow){S.fill(dx+dw,dy+st.shadow[1],st.shadow[0],dh,C.shadow);S.fill(dx+st.shadow[0],dy+dh,dw,st.shadow[1],C.shadow);}
+      S.fill(dx,dy,dw,dh,C.dlgBg);S.rect(dx,dy,dw,dh,C.frame);S.rect(dx+1,dy,dw-2,dh,C.frame);
+      const ins=X(4),insy=Math.max(2,Y(3));S.rect(dx+ins,dy+insy,dw-2*ins,dh-2*insy,C.frame);top=dy+insy;
+    }
+    const cy=top+vpad,ax=dx+pad;
+    S.fill(ax,cy,aw,ah,C.alertBg);S.rect(ax,cy,aw,ah,C.frame);T(ax+((aw-cw)>>1),ty(cy,ah),'!',C.alertText);
+    const tx=ax+aw+X(12),ly=cy+((body-lines.length*rh)>>1);
+    lines.forEach((l,i)=>T(tx,ly+i*rh+1,l,C.text));
+    const by=cy+body+vpad,delX=dx+dw-pad-bw,canX=delX-bgap-bw;
+    const button=(x,y,w,h,label,def)=>{
+      const lx=x+((w-TW(label))>>1),lyy=ty(y,h);
+      if(st.button==='bevel'){if(def)S.rect(x-1,y-1,w+2,h+2,C.frame);bevel(S,x,y,w,h,C.face,C.hi,C.lo,C.frame,true);T(lx,lyy,label,C.text);}
+      else if(st.button==='chunky'){S.fill(x,y,w,h,def?C.sel:C.titleOff);S.rect(x,y,w,h,C.frame);T(lx,lyy,label,def?C.selText:C.titleOffText);}
+      else{
+        const rr=(x,y,w,h)=>{S.rect(x,y,w,h,C.frame);
+          for(let q=0;q<t.triK;q++){S.px(x+q,y,C.dlgBg);S.px(x+w-1-q,y,C.dlgBg);S.px(x+q,y+h-1,C.dlgBg);S.px(x+w-1-q,y+h-1,C.dlgBg);}};
+        S.fill(x,y,w,h,C.dlgBg);rr(x,y,w,h);
+        if(def){const ox=X(4),oy=Math.max(2,Y(3));rr(x-ox,y-oy,w+2*ox,h+2*oy);S.vl(x-ox+1,y-oy+2,h+2*oy-4,C.frame);S.vl(x+w+ox-2,y-oy+2,h+2*oy-4,C.frame);S.hl(x-ox+2,y-oy+1,w+2*ox-4,C.frame);S.hl(x-ox+2,y+h+oy-2,w+2*ox-4,C.frame);}
+        T(lx,lyy,label,C.text);
+      }
+    };
+    button(canX,by,bw,bh,'Cancel',false);button(delX,by,bw,bh,'Delete',true);
+    pos.btn=[delX+(bw>>1),by+(bh>>1)];
+  }
+
+  const cur=scene===0?pos.games:scene===1?pos.menuItem:pos.btn;
+  if(cur){
+    const rows=ARROW.filter((_,i)=>i%t.curStep===0);
+    bmp(S,rows,cur[0],cur[1],C.cursor,1,rows.length);
+  }
+  return S;
+}
+
+const THEMES=[
+  {id:'paper',W:640,H:200,pa:2.4,font:'p2p',ppb:8,ixs:2,triK:2,curStep:2,pal:['#000000','#FFFFFF'],names:['black','white'],
+   style:{frame:'flat',title:'stripes',button:'round',dialog:'double',shadow:[2,1],sepDither:true},
+   c:{desk:(i,j)=>(i+j)&1,menuBg:1,menuText:0,menuLine:0,winBg:1,frame:0,text:0,titleOn:0,titleOnText:0,titleOff:1,titleOffText:0,
+      sel:0,selText:1,shadow:0,dlgBg:1,alertBg:0,alertText:1,cursor:[0,1],folder:[0,1],file:[0,1],disabled:null,
+      track:(i,j)=>(i+j)&1,thumb:1,labelBg:1,labelText:0,icon:{L:0,F:1,FF:1,shutter:1,label:1,acc:0,led:0}}},
+  {id:'arcade',W:320,H:200,pa:1.2,font:'p2p',ppb:4,ixs:1,triK:1,curStep:1,pal:['#0000AA','#55FFFF','#FF55FF','#FFFFFF'],names:['blue (colour 0)','light cyan','light magenta','white'],
+   style:{frame:'flat',title:'solid',button:'chunky',dialog:'titled',shadow:[2,2]},
+   c:{desk:(i,j)=>((i&3)===0&&(j&3)===0)?1:0,menuBg:3,menuText:0,menuLine:0,winBg:3,frame:0,text:0,titleOn:2,titleOnText:3,titleOff:1,titleOffText:0,
+      sel:2,selText:3,shadow:0,dlgBg:3,alertBg:2,alertText:3,cursor:[0,3],folder:[0,1],file:[0,3],disabled:1,sepColor:1,
+      track:(i,j)=>(i+j)&1?1:3,thumb:3,labelBg:3,labelText:0,icon:{L:0,F:3,FF:1,shutter:3,label:3,acc:2,led:2}}},
+  {id:'ink',W:640,H:200,pa:2.4,font:'p2p',ppb:8,ixs:2,triK:2,curStep:2,pal:CGA16,names:CGA16N,
+   style:{frame:'flat',title:'solid',button:'round',dialog:'double',shadow:[2,1]},
+   c:{desk:(i,j)=>(i+j)&1?3:1,menuBg:15,menuText:0,menuLine:0,winBg:15,frame:0,text:0,titleOn:1,titleOnText:15,titleOff:15,titleOffText:8,
+      sel:1,selText:15,shadow:0,dlgBg:15,alertBg:14,alertText:0,cursor:[0,15],folder:[0,14],file:[0,15],disabled:7,sepColor:7,
+      track:(i,j)=>(i+j)&1?7:15,thumb:15,labelBg:15,labelText:0,icon:{L:0,F:15,FF:1,shutter:7,label:15,acc:8,led:10}}},
+  {id:'bevel',W:640,H:350,pa:1.37,font:'vt',ppb:8,ixs:2,triK:1,curStep:1,pal:CGA16,names:CGA16N,
+   style:{frame:'bevel',title:'solid',button:'bevel',dialog:'titled',shadow:null},
+   c:{desk:3,menuBg:15,menuText:0,menuLine:0,face:7,hi:15,lo:8,winBg:15,infoBg:15,frame:0,text:0,titleOn:1,titleOnText:15,titleOff:7,titleOffText:0,
+      sel:1,selText:15,dlgBg:7,alertBg:14,alertText:0,cursor:[0,15],folder:[0,14],file:[0,15],disabled:8,sepColor:0,
+      track:(i,j)=>(i+j)&1?7:15,labelBg:null,labelText:15,icon:{L:0,F:7,FF:1,shutter:7,label:15,acc:8,led:10}}}
+];
+
+function blit(S,pal,cv){
+  cv.width=S.W;cv.height=S.H;const ctx=cv.getContext('2d');const img=ctx.createImageData(S.W,S.H);
+  const rgb=pal.map(h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]);
+  for(let i=0;i<S.b.length;i++){const c=rgb[S.b[i]]||rgb[0];img.data[i*4]=c[0];img.data[i*4+1]=c[1];img.data[i*4+2]=c[2];img.data[i*4+3]=255;}
+  ctx.putImageData(img,0,0);
+}
+function swatches(t,S){
+  const used=[...new Set(S.b)].sort((a,b)=>a-b);const el=document.getElementById('sw-'+t.id);if(!el)return;
+  el.innerHTML='';
+  for(const i of used){const s=document.createElement('span');s.className='sw';s.title=t.names[i];
+    const b=document.createElement('i');b.style.background=t.pal[i];s.append(b);
+    if(t.pal.length<=4){const n=document.createElement('span');n.textContent=t.names[i];s.append(n);}
+    el.append(s);}
+  if(t.pal.length>4){const n=document.createElement('span');n.textContent=used.length+' of 16 used';el.append(n);}
+}
+
+let scene=1;
+function draw(){
+  for(const t of THEMES){
+    try{const S=render(t,scene);blit(S,t.pal,document.getElementById('cv-'+t.id));swatches(t,S);}
+    catch(e){console.error(t.id,e);}
+  }
+  document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.scene===scene)));
+}
+document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{scene=+b.dataset.scene;draw();}));
+
+function start(){prepFont(FONTS.p2p);prepFont(FONTS.vt);draw();}
+const loads=document.fonts?Promise.all([document.fonts.load('8px "Press Start 2P"'),document.fonts.load('20px "VT323"')]):Promise.resolve();
+Promise.race([loads,new Promise(r=>setTimeout(r,3000))]).then(start,start);
+})();
+</script>
+
+</html>

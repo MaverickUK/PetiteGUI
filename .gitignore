@@ -1,0 +1,6 @@
+build/
+*.obj
+*.err
+*.map
+.DS_Store
+__pycache__/

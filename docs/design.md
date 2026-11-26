@@ -1,0 +1,63 @@
+# How PetiteGUI is built
+
+Back to the [README](../README.md).
+
+## The layers
+
+```
+main.c     events, commands, what changed and what to redraw
+draw.c     the desktop's widgets, drawn from the state in App A
+gfx.c      clipping, text, masks, save/restore: the only drawing calls draw.c makes
+drv_*.c    one video mode's memory: fill, pattern, span, xor, save, restore, dump
+mouse.c    INT 33h
+```
+
+A **driver** (`gfx.h`'s `Driver`) knows one mode's memory layout and nothing else; it gets coordinates already clipped to the screen. **gfx** clips everything to the current clip rectangle first, so the widgets can draw anywhere. A **theme** (`theme.c`) is the colour table the widgets use. Paper is `drv_cga` with `theme_paper`, Ink is `drv_ega` with `theme_ink`: every widget is shared.
+
+## The video modes
+
+**Paper, CGA mode 06h:** 640×200, 1 bit a pixel, 80 bytes a row, bit 7 the leftmost pixel. Even rows start at `B800:0000`, odd rows at `B800:2000` (two 8 KB banks), so a row's address is `(y & 1) * 0x2000 + (y >> 1) * 80`.
+
+**Ink, EGA mode 0Eh:** 640×200 in 16 colours, as four bit planes at `A000:0000`, 80 bytes a row in each. The CPU sees one byte per 8 pixels, and the EGA's graphics controller (ports `3CEh`/`3CFh`) decides what a write does to the four planes:
+- **Set/reset** holds a colour, and with it enabled one write paints that colour in all four planes.
+- **The bit mask** picks which of the byte's 8 pixels change; the rest come from the **latches**, which the last read of that byte loaded. So a partial byte is read, then written.
+- **The function select** can XOR instead of replace: the window outline while dragging.
+
+Every driver function puts the registers back to the BIOS defaults when it's done, because the mouse driver draws the pointer assuming them.
+
+## Byte-aligned windows
+
+Window edges sit on multiples of 8 pixels (`SNAP8`), so a window's fills, copies and most of its text are whole bytes, with no shifting. Text at any x still works (`gfx_bits` shifts a 16-pixel span across up to 3 bytes); it's just slower.
+
+## The pixels are tall
+
+On a 4:3 monitor, a 640×200 pixel is 2.4 times taller than it is wide. So anything meant to look square is wider than it is tall in pixels: the scroll arrows are 16×7, the close box 12×5, the list icons are drawn 2 pixels wide per source pixel, and the mouse pointer uses every other row of a normal arrow.
+
+## Text
+
+The system BIOS keeps an 8×8 font for characters 0–127 at `F000:FA6E`, on every PC whatever the video card. PetiteGUI draws from it directly, so it needs no font file. Disabled text in Paper is dithered (every other pixel), since there's no grey.
+
+## Redrawing
+
+There's no off-screen buffer. When something changes, `redraw()` draws the rectangle that changed, back to front, clipped to it: the desktop pattern, the icons, the windows in z-order, the menu bar. A window moving redraws where it was and where it is.
+
+Menus and alerts are different: they **save the pixels under them** (`gfx_save`) and put them back when they close, which is faster and needs no redraw of what's beneath. Paper's File menu, with its shadow, is about 1.9 KB; Ink's, in four planes, about 7.5 KB.
+
+Dragging a window draws an XOR outline (drawn twice, it leaves the screen as it was), and only moves the window when the button is let go.
+
+## The mouse
+
+The DOS mouse driver (`INT 33h`) reads the mouse and draws the pointer in modes 06h and 0Eh. PetiteGUI resets it after each mode change (function 0, so it learns the mode), sets the range to 640×200 and the pointer's shape (function 9), and hides the pointer around every drawing call (functions 2 and 1), since the driver saves and restores the pixels under it.
+
+The program polls: `mouse_read` (function 3) for the position and buttons, `kbhit` for keys. A press acts at once; anything held (dragging, menus, scroll arrows) loops until the button is let go.
+
+## Memory
+
+Small model: up to 64 KB of code and 64 KB of data. Saved rectangles come from the far heap (`_fmalloc`). The program is about 33 KB.
+
+## Next
+
+- Speed on a real 8088: the inner loops (fills, text, spans) into NASM, after measuring.
+- Real directories in the windows (DOS `findfirst`/`findnext`).
+- Resizing windows; more than two.
+- Arcade (CGA 320×200, 4 colours) and Bevel (EGA 640×350) as further drivers: see [style-studies.html](style-studies.html).
