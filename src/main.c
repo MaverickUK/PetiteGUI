@@ -16,8 +16,10 @@
  *                     6 the right-click menu, 7 an edit saved, 8 windows resized and zoomed,
  *                     9 the About box, 10 a command run, 11 a batch file opened, 12 Run...,
  *                     13 file operations, 14 deleting a folder, 15 a selection and the Edit
- *                     menu, 16 the clipboard, Find and Save as), write video memory to
- *                     FILE.BIN and quit: tools/shot.sh makes a PNG
+ *                     menu, 16 the clipboard, Find and Save as, 17 several files selected,
+ *                     18 the Info box, 19 sorting by date, several selected, Info and
+ *                     deleting, 20 the System menu), write video memory to FILE.BIN and quit: tools/shot.sh
+ *                     makes a PNG
  *   PETITE /DRIVES    list the drives found, and quit
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
@@ -53,7 +55,7 @@ enum {
     CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP,
     CMD_SAVER_NOW, CMD_RUN_DIALOG, CMD_DOS_PROMPT, CMD_RENAME, CMD_MOVE,
     CMD_NEW_TEXT, CMD_SAVE_AS, CMD_CUT, CMD_COPY_TEXT, CMD_PASTE, CMD_SELECT_ALL, CMD_FIND,
-    CMD_FIND_NEXT
+    CMD_FIND_NEXT, CMD_BY_DATE
 };
 #define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
 #define CMD_SAVER_DELAY 400 /* + minutes */
@@ -61,6 +63,8 @@ enum {
 
 static MenuItem system_items[] = {
     { "About PetiteGUI...", NULL, 0, CMD_ABOUT },
+    { "", NULL, MI_SEP, 0 },
+    { "Quit", "Ctrl+Q", 0, CMD_QUIT }, /* as in the File menu: where people look for it */
 };
 enum { /* file_items' places */
     FI_OPEN, FI_OPEN_TEXT, FI_RUN, FI_PROMPT, FI_INFO, FI_SEP1, FI_NEW_FOLDER, FI_RENAME, FI_COPY,
@@ -117,6 +121,7 @@ static MenuItem game_context[] = {
 static MenuItem view_items[] = {
     { "By name", NULL, MI_CHECK, CMD_BY_NAME },
     { "By size", NULL, 0, CMD_BY_SIZE },
+    { "By date", NULL, 0, CMD_BY_DATE },
 };
 static MenuItem games_items[] = {
     { "Show games", "Ctrl+G", 0, CMD_GAMES },
@@ -185,7 +190,7 @@ static void sort_windows(void)
         name[0] = '\0';
         if (w->sel >= 0)
             strcpy(name, w->rows[w->sel].name);
-        files_sort(w, A.sort_by_size);
+        files_sort(w, A.sort_by);
         for (k = 0; k < w->nrows; k++)
             if (strcmp(w->rows[k].name, name) == 0)
                 w->sel = k;
@@ -303,6 +308,8 @@ static void app_init(void)
     files_load(c, 0);
 }
 
+static int selected_count(int i);
+
 /* Check marks and greyed items that follow the state. */
 static void update_menus(void)
 {
@@ -310,20 +317,23 @@ static void update_menus(void)
     const Win *w = f >= 0 ? &A.win[f] : NULL;
     const Row *row = w != NULL && w->kind == WIN_FILES && w->sel >= 0 && w->sel < w->nrows ? &w->rows[w->sel] : NULL;
     int file = row != NULL && !row->dir, up = row != NULL && strcmp(row->name, "..") == 0;
+    int several = w != NULL && w->kind == WIN_FILES && selected_count(f) > 1;
 
-    file_items[FI_OPEN_TEXT].flags = file_context[FC_OPEN_TEXT].flags = (uint8_t)(file ? 0 : MI_OFF);
+    file_items[FI_OPEN_TEXT].flags = file_context[FC_OPEN_TEXT].flags = (uint8_t)(file && !several ? 0 : MI_OFF);
     {
-        uint8_t item = (uint8_t)(row != NULL && !up ? 0 : MI_OFF); /* a file or folder, not ".." */
+        uint8_t item = (uint8_t)((row != NULL && !up) || several ? 0 : MI_OFF); /* not just ".." */
+        uint8_t one = (uint8_t)(row != NULL && !up && !several ? 0 : MI_OFF);
         uint8_t here = (uint8_t)(w != NULL && w->kind == WIN_FILES && !w->not_ready ? 0 : MI_OFF);
 
-        file_items[FI_RENAME].flags = file_context[FC_RENAME].flags = item;
+        file_items[FI_RENAME].flags = file_context[FC_RENAME].flags = one;
         file_items[FI_COPY].flags = file_context[FC_COPY].flags = item;
         file_items[FI_MOVE].flags = file_context[FC_MOVE].flags = item;
         file_items[FI_DELETE].flags = file_context[FC_DELETE].flags = (uint8_t)(f == GAMES_WIN ? 0 : item);
         file_items[FI_NEW_FOLDER].flags = here;
+        file_items[FI_INFO].flags = (uint8_t)(several ? MI_OFF : 0);
     }
-    file_context[FC_INFO].flags = (uint8_t)(up ? MI_OFF : 0);
-    file_context[FC_RUN].flags = (uint8_t)(file && path_is_program(row->name) ? 0 : MI_OFF);
+    file_context[FC_INFO].flags = (uint8_t)(up || several ? MI_OFF : 0);
+    file_context[FC_RUN].flags = (uint8_t)(file && !several && path_is_program(row->name) ? 0 : MI_OFF);
     {
         int ed = f == EDIT_WIN && E.open;
         unsigned s, e;
@@ -333,7 +343,8 @@ static void update_menus(void)
         file_items[FI_SAVE_AS].flags = (uint8_t)(ed ? 0 : MI_OFF);
         edit_items[EI_CUT].flags = edit_items[EI_COPY].flags = sel;
         edit_items[EI_PASTE].flags = (uint8_t)(ed && edit_can_paste() ? 0 : MI_OFF);
-        edit_items[EI_SELECT_ALL].flags = edit_items[EI_FIND].flags = (uint8_t)(ed ? 0 : MI_OFF);
+        edit_items[EI_FIND].flags = (uint8_t)(ed ? 0 : MI_OFF);
+        edit_items[EI_SELECT_ALL].flags = (uint8_t)(ed || (w != NULL && w->kind == WIN_FILES && w->nrows > 0) ? 0 : MI_OFF);
         edit_items[EI_FIND_NEXT].flags = (uint8_t)(ed ? 0 : MI_OFF);
     }
     game_context[1].flags = (uint8_t)(game ? 0 : MI_OFF);
@@ -361,8 +372,9 @@ static void update_menus(void)
     games_items[2].flags = (uint8_t)(game ? 0 : MI_OFF);
     games_items[3].flags = (uint8_t)(game ? 0 : MI_OFF);
     games_items[4].flags = (uint8_t)(game ? 0 : MI_OFF);
-    view_items[0].flags = (uint8_t)(A.sort_by_size ? 0 : MI_CHECK);
-    view_items[1].flags = (uint8_t)(A.sort_by_size ? MI_CHECK : 0);
+    view_items[0].flags = (uint8_t)(A.sort_by == SORT_NAME ? MI_CHECK : 0);
+    view_items[1].flags = (uint8_t)(A.sort_by == SORT_SIZE ? MI_CHECK : 0);
+    view_items[2].flags = (uint8_t)(A.sort_by == SORT_DATE ? MI_CHECK : 0);
     options_items[0].flags = (uint8_t)(A.theme == &theme_paper ? MI_CHECK : 0);
     options_items[1].flags = (uint8_t)(!A.has_ega ? MI_OFF : (A.theme == &theme_ink ? MI_CHECK : 0));
 }
@@ -605,18 +617,65 @@ static Rect row_rect(int i, const WinParts *p, int k)
     return rect_make(p->list.x, p->list.y + 1 + (k - A.win[i].top) * ROW_H, p->list.w, ROW_H);
 }
 
-/* Select a row, scrolling to it. Unless the list scrolls, only the two rows that change are
- * redrawn, not the window (which would flash). */
-static void select_row(int i, int k)
+/* How a click picks rows in a folder window: just it, from the anchor to it (Shift), or it
+ * as well as the others, or not (Ctrl). */
+enum { PICK_ONE, PICK_RANGE, PICK_TOGGLE };
+
+static int selected_count(int i)
 {
+    const Win *w = &A.win[i];
+    int k, n = 0;
+
+    if (i < 0)
+        return 0;
+    for (k = 0; k < w->nrows; k++)
+        if (ROW_SELECTED(w, k))
+            n++;
+    return n;
+}
+
+/* Select row k of window i, as mode says, and scroll to it. Unless the list scrolls, only
+ * the rows that change are redrawn, not the window (which would flash). */
+static void select_rows(int i, int k, int mode)
+{
+    static uint8_t was[MAX_ROWS];
     Win *w = &A.win[i];
     WinParts p;
-    int old = w->sel, top = w->top;
-    Rect r;
+    int old = w->sel, top = w->top, r, lo, hi, before, now;
+    Rect rr;
 
     if (k < 0 || k >= w->nrows)
         return;
-    w->sel = k;
+    if (w->kind != WIN_FILES) {
+        w->sel = k;
+    } else {
+        for (r = 0; r < w->nrows; r++)
+            was[r] = (uint8_t)ROW_SELECTED(w, r);
+        if (mode == PICK_TOGGLE) {
+            if (w->sel >= 0)
+                w->rows[w->sel].picked = 1; /* it stays selected as the focus moves */
+            w->rows[k].picked ^= 1;
+            w->anchor = w->sel = k;
+            if (!w->rows[k].picked) { /* the focus goes to the nearest still selected */
+                w->sel = -1;
+                for (r = 0; r < w->nrows; r++)
+                    if (w->rows[r].picked && (w->sel < 0 || abs(r - k) < abs(w->sel - k)))
+                        w->sel = r;
+            }
+        } else {
+            for (r = 0; r < w->nrows; r++)
+                w->rows[r].picked = 0;
+            if (mode == PICK_RANGE && w->anchor >= 0 && w->anchor < w->nrows) {
+                lo = w->anchor < k ? w->anchor : k;
+                hi = w->anchor < k ? k : w->anchor;
+                for (r = lo; r <= hi; r++)
+                    w->rows[r].picked = (uint8_t)(strcmp(w->rows[r].name, "..") != 0);
+            } else {
+                w->anchor = k;
+            }
+            w->sel = k;
+        }
+    }
     window_parts(i, &p);
     if (k < w->top)
         w->top = k;
@@ -626,12 +685,54 @@ static void select_row(int i, int k)
         redraw_window(i);
         return;
     }
-    if (old >= 0 && old != k && old - w->top >= 0 && old - w->top <= p.visible) {
-        r = row_rect(i, &p, old);
-        redraw(&r);
+    for (r = w->top; r < w->nrows && r - w->top <= p.visible; r++) {
+        before = w->kind == WIN_FILES ? was[r] : r == old;
+        now = ROW_SELECTED(w, r);
+        if (before != now) {
+            rr = row_rect(i, &p, r);
+            redraw(&rr);
+        }
     }
-    r = row_rect(i, &p, k);
-    redraw(&r);
+}
+
+static void select_row(int i, int k)
+{
+    select_rows(i, k, PICK_ONE);
+}
+
+/* Edit > Select all in a folder window: everything but "..". */
+static void select_all_rows(int i)
+{
+    Win *w = &A.win[i];
+    int k;
+
+    for (k = 0; k < w->nrows; k++)
+        w->rows[k].picked = (uint8_t)(strcmp(w->rows[k].name, "..") != 0);
+    if (w->sel < 0 || !w->rows[w->sel].picked)
+        for (w->sel = -1, k = 0; k < w->nrows && w->sel < 0; k++)
+            if (w->rows[k].picked)
+                w->sel = k;
+    w->anchor = w->sel;
+    redraw_window(i);
+}
+
+/* The names selected in a folder window (but ".."), for copying, moving and deleting. */
+static char batch[MAX_ROWS][13];
+static long counts[MAX_ROWS]; /* the files in each, for the progress box */
+static int batch_n;
+
+static int collect_batch(int i)
+{
+    const Win *w = &A.win[i];
+    int k;
+
+    batch_n = 0;
+    if (i < 0 || i >= DIR_WINS)
+        return 0;
+    for (k = 0; k < w->nrows; k++)
+        if (ROW_SELECTED(w, k) && strcmp(w->rows[k].name, "..") != 0)
+            strcpy(batch[batch_n++], w->rows[k].name);
+    return batch_n;
 }
 
 static void scroll_by(int i, int d)
@@ -884,13 +985,20 @@ static void press_window(int i, int x, int y)
 
         k = w->top + (y - p.list.y - 1) / ROW_H;
         if (k < w->nrows) {
-            int twice = i == last_win && k == last_row && ticks() - last_time < 9;
+            int keys = w->kind == WIN_FILES ? kb_shift() : 0;
+            int mode = (keys & KB_CTRL) ? PICK_TOGGLE : (keys & KB_SHIFT) ? PICK_RANGE : PICK_ONE;
+            int twice = mode == PICK_ONE && i == last_win && k == last_row && ticks() - last_time < 9;
+            /* a press on one of several selected keeps them all, to drag together */
+            int keep = mode == PICK_ONE && ROW_SELECTED(w, k) && selected_count(i) > 1;
 
-            select_row(i, k);
-            if (w->kind == WIN_FILES && drag_item(i, k, x, y)) {
+            if (!keep)
+                select_rows(i, k, mode);
+            if (w->kind == WIN_FILES && mode == PICK_ONE && drag_item(i, k, x, y)) {
                 last_win = -1;
                 return;
             }
+            if (keep) /* just a click: only it, now */
+                select_row(i, k);
             wait_release(&ux, &uy);
             last_win = i;
             last_row = k;
@@ -955,7 +1063,7 @@ static void open_drive(char letter)
     }
     w = &A.win[use];
     sprintf(w->path, "%c:\\", letter);
-    files_load(w, A.sort_by_size);
+    files_load(w, A.sort_by);
     w->sel = -1;
     w->top = 0;
     open_window(use);
@@ -990,7 +1098,7 @@ static void enter_dir(int i, const char *name)
         strcat(w->path, name);
         strcat(w->path, "\\");
     }
-    files_load(w, A.sort_by_size);
+    files_load(w, A.sort_by);
     w->sel = w->nrows > 0 ? 0 : -1;
     w->top = 0;
     for (k = 0; child[0] && k < w->nrows; k++)
@@ -1039,7 +1147,7 @@ static void reload_dir(int i)
     Win *w = &A.win[i];
     int sel = w->sel;
 
-    files_load(w, A.sort_by_size);
+    files_load(w, A.sort_by);
     if (sel >= w->nrows)
         sel = w->nrows - 1;
     w->sel = sel;
@@ -1085,7 +1193,7 @@ static void reload_dirs(void)
         name[0] = '\0';
         if (w->sel >= 0 && w->sel < w->nrows)
             strcpy(name, w->rows[w->sel].name);
-        files_load(w, A.sort_by_size);
+        files_load(w, A.sort_by);
         w->sel = w->nrows > 0 ? 0 : -1;
         for (k = 0; name[0] && k < w->nrows; k++)
             if (stricmp(w->rows[k].name, name) == 0)
@@ -1108,19 +1216,21 @@ static void select_name(int i, const char *name)
         }
 }
 
-/* The progress box: an alert with no buttons, its lines changed as each file goes. */
-static long progress_total;
+/* The progress box: an alert with no buttons, its lines changed as each file goes. The
+ * count runs on across several items: progress_base is the files of those already done. */
+static long progress_total, progress_base;
 static const char *progress_verb;
 
 static int show_progress(const char *name, long done)
 {
     char line[40];
-    int ext;
     size_t n = strlen(name);
+    int ext;
 
     if (kb_hit() && kb_read(&ext) == 27)
         return 0;
-    sprintf(line, "%s %ld of %ld file%s...", progress_verb, done + 1, progress_total, progress_total == 1 ? "" : "s");
+    sprintf(line, "%s %ld of %ld file%s...", progress_verb, progress_base + done + 1, progress_total,
+            progress_total == 1 ? "" : "s");
     sprintf(A.alert.line1, "%-30s", line);
     if (n > 30)
         sprintf(line, "...%s", name + n - 27);
@@ -1133,13 +1243,12 @@ static int show_progress(const char *name, long done)
     return 1;
 }
 
-static void progress_open(const char *verb, const char *src)
+static void progress_open(const char *verb, long total)
 {
-    long files = 0, bytes = 0;
     char blank[32];
 
-    fo_count(src, &files, &bytes);
-    progress_total = files > 0 ? files : 1;
+    progress_total = total > 0 ? total : 1;
+    progress_base = 0;
     progress_verb = verb;
     sprintf(blank, "%-30s", "");
     show_alert(blank, blank, NULL, NULL, CMD_NONE);
@@ -1161,32 +1270,61 @@ static void editor_follow(const char *from, const char *to)
     }
 }
 
-/* Copy or move src to dst (full paths), asking before replacing, showing progress. */
-static void transfer(const char *src, const char *dst, int move)
+/* Copy or move the batch's names from src_dir to dst_dir (both ending in a backslash), under
+ * new_name if it isn't NULL (one item, renamed on the way). It asks before replacing
+ * anything, all before it starts, then shows one progress box for the lot. */
+static void transfer(const char *src_dir, const char *dst_dir, const char *new_name, int move)
 {
-    char line[48];
-    int rc, replace = 0;
+    static uint8_t how[MAX_ROWS]; /* 0 go, 1 skip (it's already there), 2 replace */
+    char src[96], dst[96], line[48], follow_to[96];
+    long total = 0, bytes;
+    int k, rc = FO_OK, failed = -1;
 
-    if (stricmp(src, dst) == 0)
-        return;
-    if (move && E.open && E.modified && path_inside(E.path, src)) {
-        show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
-        return;
-    }
-    if (fo_exists(dst)) {
-        sprintf(line, "There's a %.13s there already.", base_name(dst));
-        if (!ask_choice(line, fo_is_dir(dst) ? "Copy into it?" : "Replace it?", "Cancel", "Replace"))
+    follow_to[0] = '\0';
+    for (k = 0; k < batch_n; k++) {
+        how[k] = 0;
+        counts[k] = 0;
+        if (!path_join(src, sizeof src, src_dir, batch[k]) ||
+            !path_join(dst, sizeof dst, dst_dir, new_name != NULL ? new_name : batch[k])) {
+            show_alert("That path is too long", "for DOS.", "OK", NULL, CMD_NONE);
             return;
-        replace = 1;
+        }
+        if (stricmp(src, dst) == 0) {
+            how[k] = 1;
+            continue;
+        }
+        if (move && E.open && E.modified && path_inside(E.path, src)) {
+            show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
+            return;
+        }
+        if (fo_exists(dst)) {
+            sprintf(line, "There's a %.13s there already.", base_name(dst));
+            if (!ask_choice(line, fo_is_dir(dst) ? "Copy into it?" : "Replace it?", "Cancel", "Replace"))
+                return;
+            how[k] = 2;
+        }
+        fo_count(src, &counts[k], &bytes);
+        total += counts[k];
     }
-    progress_open(move ? "Moving" : "Copying", src);
-    rc = move ? fo_move(src, dst, replace, show_progress) : fo_copy(src, dst, replace, show_progress);
+    progress_open(move ? "Moving" : "Copying", total);
+    for (k = 0; k < batch_n && rc == FO_OK; k++) {
+        if (how[k] == 1)
+            continue;
+        path_join(src, sizeof src, src_dir, batch[k]);
+        path_join(dst, sizeof dst, dst_dir, new_name != NULL ? new_name : batch[k]);
+        rc = move ? fo_move(src, dst, how[k] == 2, show_progress) : fo_copy(src, dst, how[k] == 2, show_progress);
+        progress_base += counts[k];
+        if (rc != FO_OK)
+            failed = k;
+        else if (move && E.open && stricmp(E.path, src) == 0)
+            strcpy(follow_to, dst);
+    }
     close_alert(-1);
-    if (move && rc == FO_OK)
-        editor_follow(src, dst);
+    if (follow_to[0])
+        editor_follow(E.path, follow_to);
     reload_dirs();
-    if (rc != FO_OK) {
-        sprintf(line, "Couldn't %s %.13s:", move ? "move" : "copy", base_name(src));
+    if (failed >= 0) {
+        sprintf(line, "Couldn't %s %.13s:", move ? "move" : "copy", batch[failed]);
         show_alert(line, fo_error_text(rc), "OK", NULL, CMD_NONE);
     }
 }
@@ -1206,42 +1344,48 @@ static const char *other_dir(int from)
 }
 
 /* Copy... or Move...: ask where, then go. A folder that exists means into it; anything else
- * is the new path (a bare name, in the same folder). */
+ * is the new path (a bare name, in the same folder), for one item. */
 static void copy_or_move(int move)
 {
-    int f = front_window();
-    char src[96], dest[FIELD_MAX + 1], dst[96], prompt[48];
-    size_t n;
+    int f = front_window(), n = collect_batch(f);
+    char dest[FIELD_MAX + 1], dir[96], prompt[48];
+    const char *slash;
+    size_t len;
 
-    if (!selected_path(f, src, sizeof src))
+    if (n == 0)
         return;
     strcpy(dest, other_dir(f));
-    sprintf(prompt, "%s %.13s to:", move ? "Move" : "Copy", base_name(src));
+    if (n == 1)
+        sprintf(prompt, "%s %.13s to:", move ? "Move" : "Copy", batch[0]);
+    else
+        sprintf(prompt, "%s these %d items to:", move ? "Move" : "Copy", n);
     if (!ask_text(prompt, dest, sizeof dest) || dest[0] == '\0')
         return;
-    n = strlen(dest);
     if (strchr(dest, ':') == NULL && dest[0] != '\\') { /* a bare name: in the same folder */
         char rel[FIELD_MAX + 1];
 
         strcpy(rel, dest);
         if (!path_join(dest, sizeof dest, A.win[f].path, rel))
             return;
-        n = strlen(dest);
     }
-    if (dest[n - 1] == '\\' || fo_is_dir(dest)) {
-        if (dest[n - 1] != '\\' && n + 1 < sizeof dest)
+    len = strlen(dest);
+    if (dest[len - 1] == '\\' || fo_is_dir(dest)) {
+        if (dest[len - 1] != '\\' && len + 1 < sizeof dest)
             strcat(dest, "\\");
-        if (!path_join(dst, sizeof dst, dest, base_name(src)))
-            return;
-    } else {
-        if (!path_valid_name(base_name(dest))) {
-            show_alert("That isn't a name DOS takes:", "8 characters, a dot, then 3.", "OK", NULL, CMD_NONE);
-            return;
-        }
-        strncpy(dst, dest, sizeof dst - 1);
-        dst[sizeof dst - 1] = '\0';
+        transfer(A.win[f].path, dest, NULL, move);
+        return;
     }
-    transfer(src, dst, move);
+    if (n > 1) {
+        show_alert("Several go into a folder,", "and there's no folder there.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    slash = strrchr(dest, '\\');
+    if (slash == NULL || !path_valid_name(slash + 1)) {
+        show_alert("That isn't a name DOS takes:", "8 characters, a dot, then 3.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    sprintf(dir, "%.*s", (int)(slash - dest + 1), dest);
+    transfer(A.win[f].path, dir, slash + 1, move);
 }
 
 static void rename_item(void)
@@ -1303,45 +1447,53 @@ static void new_folder(void)
 static void delete_selected(int f)
 {
     char path[96], line[48];
-    int rc;
+    long total = 0, bytes = 0;
+    int k, rc = FO_OK, failed = -1;
 
-    if (!selected_path(f, path, sizeof path))
+    if (collect_batch(f) == 0)
         return;
-    if (E.open && path_inside(E.path, path) && E.modified) {
-        show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
-        return;
+    for (k = 0; k < batch_n; k++) {
+        path_join(path, sizeof path, A.win[f].path, batch[k]);
+        if (E.open && E.modified && path_inside(E.path, path)) {
+            show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
+            return;
+        }
+        counts[k] = 0;
+        fo_count(path, &counts[k], &bytes);
+        total += counts[k];
     }
-    progress_open("Deleting", path);
-    rc = fo_delete(path, show_progress);
+    progress_open("Deleting", total);
+    for (k = 0; k < batch_n && rc == FO_OK; k++) {
+        path_join(path, sizeof path, A.win[f].path, batch[k]);
+        rc = fo_delete(path, show_progress);
+        progress_base += counts[k];
+        if (rc != FO_OK)
+            failed = k;
+    }
     close_alert(-1);
-    if (E.open && path_inside(E.path, path))
+    if (E.open && E.path[0] && !fo_exists(E.path))
         editor_follow(E.path, NULL);
     reload_dirs();
-    if (rc != FO_OK) {
-        sprintf(line, "Couldn't delete %.13s:", base_name(path));
+    if (failed >= 0) {
+        sprintf(line, "Couldn't delete %.13s:", batch[failed]);
         show_alert(line, fo_error_text(rc), "OK", NULL, CMD_NONE);
     }
 }
 
-/* Is the Ctrl key down? (The BIOS keeps the shift keys at 0040:0017; Ctrl is bit 2.) */
-static int ctrl_down(void)
-{
-    return (*(volatile unsigned char __far *)MK_FP(0x40, 0x17) & 4) != 0;
-}
-
-/* Drag a file or folder from window i's row k: an outline follows the pointer; let go on
+/* Drag what's selected from window i's row k: an outline follows the pointer; let go on
  * another folder window (or a folder in one) or a drive's icon to move it there (the same
  * drive) or copy it (another drive, or with Ctrl). Returns zero if the pointer never left
  * the row, so it was just a click. */
 static int drag_item(int i, int k, int mx, int my)
 {
     Win *w = &A.win[i];
-    char src[96], dir[96], dst[96], child[13];
+    char dir[96], child[13];
     Rect box, next;
     int x, y, b, t, n, dragging = 0;
     WinParts p;
 
-    if (!selected_path(i, src, sizeof src))
+    (void)k;
+    if (collect_batch(i) == 0)
         return 0;
     box = rect_make(mx - 40, my - 4, 80, 9);
     for (;;) {
@@ -1378,7 +1530,7 @@ static int drag_item(int i, int k, int mx, int my)
         window_parts(t, &p);
         n = A.win[t].top + (y - p.list.y - 1) / ROW_H;
         if (rect_contains(&p.list, x, y) && n < A.win[t].nrows && A.win[t].rows[n].dir &&
-            !(t == i && n == k)) { /* onto a folder in it */
+            !(t == i && ROW_SELECTED(w, n))) { /* onto a folder in it, not one being dragged */
             strcpy(child, A.win[t].rows[n].name);
             if (strcmp(child, "..") == 0)
                 path_parent(dir, NULL, 0);
@@ -1393,9 +1545,9 @@ static int drag_item(int i, int k, int mx, int my)
                 sprintf(dir, "%c:\\", A.icon[n].drive);
         }
     }
-    if (dir[0] == '\0' || stricmp(dir, w->path) == 0 || !path_join(dst, sizeof dst, dir, base_name(src)))
+    if (dir[0] == '\0' || stricmp(dir, w->path) == 0)
         return 1;
-    transfer(src, dst, path_same_drive(src, dst) && !ctrl_down());
+    transfer(w->path, dir, NULL, path_same_drive(w->path, dir) && !(kb_shift() & KB_CTRL));
     return 1;
 }
 
@@ -1923,7 +2075,7 @@ static void return_desktop(void)
     }
     for (i = 0; i < DIR_WINS; i++)
         if (A.win[i].open)
-            files_load(&A.win[i], A.sort_by_size);
+            files_load(&A.win[i], A.sort_by);
     gfx_start(gfx_driver());
     mouse_init();
     if (games_were_loaded) {
@@ -2096,6 +2248,108 @@ static int ask_choice(const char *line1, const char *line2, const char *no, cons
     return result == 1;
 }
 
+/* File > Info... for the selected file or folder: its size, date and attributes. Read-only and
+ * hidden switch (a click, or R and H); OK sets them. */
+static void info_dialog(int f)
+{
+    const Win *w = &A.win[f];
+    const Row *row = &w->rows[w->sel];
+    Info *in = &A.info;
+    char path[96], num[16], date[12], time[6];
+    int x, y, b, prev = 1, ch, ext, i, ux, uy, result = -1, changed = 0;
+    unsigned attr;
+    Rect r;
+    uint8_t __far *save;
+
+    if (!path_join(path, sizeof path, w->path, row->name))
+        return;
+    strcpy(in->name, row->name);
+    if (row->dir) {
+        strcpy(in->size, "A folder.");
+    } else {
+        fmt_thousands(row->size, num);
+        sprintf(in->size, "%s byte%s.", num, row->size == 1 ? "" : "s");
+    }
+    fmt_date(row->date, date);
+    fmt_time(row->time, time);
+    if (date[0])
+        sprintf(in->date, "Written %s at %s.", date, time);
+    else
+        in->date[0] = '\0';
+    in->also[0] = '\0';
+    if (row->attrib & (_A_SYSTEM | _A_ARCH))
+        sprintf(in->also, "Also: %s%s%s.", row->attrib & _A_SYSTEM ? "system" : "",
+                (row->attrib & _A_SYSTEM) && (row->attrib & _A_ARCH) ? ", " : "",
+                row->attrib & _A_ARCH ? "archive (not backed up)" : "");
+    in->read_only = (row->attrib & _A_RDONLY) != 0;
+    in->hidden = (row->attrib & _A_HIDDEN) != 0;
+
+    info_layout();
+    r = in->r;
+    r.w += SHADOW_X;
+    r.h += SHADOW_Y;
+    mouse_hide();
+    save = gfx_save(&r);
+    draw_info();
+    mouse_show();
+    while (result < 0) {
+        int toggle = -1;
+
+        if (kb_hit()) {
+            ch = kb_read(&ext);
+            if (ch == 13)
+                result = 1;
+            else if (ch == 27)
+                result = 0;
+            else if (ch == 'r' || ch == 'R')
+                toggle = 0;
+            else if (ch == 'h' || ch == 'H')
+                toggle = 1;
+        }
+        mouse_read(&x, &y, &b);
+        if ((b & 1) && !(prev & 1)) {
+            for (i = 0; i < 2; i++) {
+                if (rect_contains(&in->check[i], x, y))
+                    toggle = i;
+                if (rect_contains(&in->b[i], x, y)) {
+                    wait_release(&ux, &uy);
+                    if (rect_contains(&in->b[i], ux, uy))
+                        result = i;
+                }
+            }
+        }
+        prev = b;
+        if (toggle >= 0) {
+            if (toggle == 0)
+                in->read_only = !in->read_only;
+            else
+                in->hidden = !in->hidden;
+            mouse_hide();
+            draw_info_checks();
+            mouse_show();
+        }
+        if (shot_mode && result < 0 && !kb_hit())
+            break; /* a screenshot: leave it showing (keys put in the buffer are still read) */
+    }
+    if (shot_mode && result < 0)
+        return;
+    mouse_hide();
+    if (save != NULL)
+        gfx_restore(&r, save);
+    else
+        draw_desktop(&r);
+    mouse_show();
+    changed = in->read_only != ((row->attrib & _A_RDONLY) != 0) || in->hidden != ((row->attrib & _A_HIDDEN) != 0);
+    if (result != 1 || !changed)
+        return;
+    attr = (unsigned)(row->attrib & (_A_SYSTEM | _A_ARCH)) | (in->read_only ? _A_RDONLY : 0) | (in->hidden ? _A_HIDDEN : 0);
+    if (_dos_setfileattr(path, attr) != 0) {
+        show_alert("Couldn't change it.", "Is the disk write-protected?", "OK", NULL, CMD_NONE);
+        return;
+    }
+    reload_dirs();
+}
+
 /* File > Run...: a command line, filled in with the selected program, run in the folder
  * through COMMAND.COM (so the PATH and DOS's own commands work), its output kept on the
  * screen until a key. */
@@ -2218,12 +2472,19 @@ static void switch_theme(const Driver *d, const Theme *t)
     mouse_show();
 }
 
+static void info_dialog(int f);
+
 static void run(int cmd)
 {
     int f = front_window();
     Win *w = f >= 0 ? &A.win[f] : NULL;
-    char line[40], size[16];
+    char line[40];
 
+    if ((cmd == CMD_RENAME || cmd == CMD_INFO || cmd == CMD_EDIT_FILE) && f >= 0 && f < DIR_WINS &&
+        selected_count(f) > 1) {
+        show_alert("Select just one for that.", "", "OK", NULL, CMD_NONE);
+        return;
+    }
     switch (cmd) {
     case CMD_ABOUT:
         sprintf(line, "PetiteGUI %s, for CGA and EGA", PETITE_VERSION);
@@ -2260,10 +2521,15 @@ static void run(int cmd)
     case CMD_NEW_TEXT:
         new_text_file();
         break;
+    case CMD_SELECT_ALL:
+        if (w != NULL && w->kind == WIN_FILES)
+            select_all_rows(f);
+        else
+            editor_command(cmd);
+        break;
     case CMD_CUT:
     case CMD_COPY_TEXT:
     case CMD_PASTE:
-    case CMD_SELECT_ALL:
         editor_command(cmd);
         break;
     case CMD_FIND:
@@ -2321,13 +2587,10 @@ static void run(int cmd)
             game_info();
         else if (w == NULL || w->kind != WIN_FILES || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
-        } else if (w->rows[w->sel].dir) {
-            show_alert(w->rows[w->sel].name, strcmp(w->rows[w->sel].name, "..") == 0 ?
-                       "The folder above this one." : "A folder.", "OK", NULL, CMD_NONE);
+        } else if (strcmp(w->rows[w->sel].name, "..") == 0) {
+            show_alert("..", "The folder above this one.", "OK", NULL, CMD_NONE);
         } else {
-            fmt_thousands(w->rows[w->sel].size, size);
-            sprintf(line, "%s bytes.", size);
-            show_alert(w->rows[w->sel].name, line, "OK", NULL, CMD_NONE);
+            info_dialog(f);
         }
         break;
     case CMD_DELETE:
@@ -2335,6 +2598,20 @@ static void run(int cmd)
             show_alert("Remove games in GameMinder:", "it deletes their !GM_INFO.TXT.", "OK", NULL, CMD_NONE);
         } else if (w == NULL || w->kind != WIN_FILES || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
+        } else if (selected_count(f) > 1) {
+            char path[96], what[40];
+            long files, bytes = 0, total = 0;
+            int k, n = collect_batch(f);
+
+            for (k = 0; k < n; k++) {
+                files = 0;
+                path_join(path, sizeof path, w->path, batch[k]);
+                fo_count(path, &files, &bytes);
+                total += files;
+            }
+            sprintf(line, "Delete these %d items?", n);
+            sprintf(what, "%ld file%s in all, for good.", total, total == 1 ? "" : "s");
+            show_alert(line, what, "Cancel", "Delete", CMD_DO_DELETE);
         } else if (strcmp(w->rows[w->sel].name, "..") == 0) {
             break;
         } else if (w->rows[w->sel].dir) {
@@ -2385,7 +2662,8 @@ static void run(int cmd)
         break;
     case CMD_BY_NAME:
     case CMD_BY_SIZE:
-        A.sort_by_size = cmd == CMD_BY_SIZE;
+    case CMD_BY_DATE:
+        A.sort_by = cmd == CMD_BY_SIZE ? SORT_SIZE : cmd == CMD_BY_DATE ? SORT_DATE : SORT_NAME;
         sort_windows();
         redraw(&FULL);
         break;
@@ -2598,10 +2876,8 @@ static void on_key(int ch, int ext)
             run(CMD_MOVE);
         else if (ch == 65) /* F7 */
             run(CMD_NEW_FOLDER);
-        else if (f >= 0 && ch == 72)
-            select_row(f, A.win[f].sel - 1);
-        else if (f >= 0 && ch == 80)
-            select_row(f, A.win[f].sel + 1);
+        else if (f >= 0 && (ch == 72 || ch == 80)) /* up, down; with Shift, selecting */
+            select_rows(f, A.win[f].sel + (ch == 72 ? -1 : 1), (kb_shift() & KB_SHIFT) ? PICK_RANGE : PICK_ONE);
         break;
     }
 }
@@ -2623,6 +2899,17 @@ static int find_row(int i, const char *name)
         if (stricmp(A.win[i].rows[k].name, name) == 0)
             return k;
     return 0;
+}
+
+/* Put a key in the BIOS's keyboard buffer (INT 16h function 5), as if it had been typed. */
+static void stuff_key(int ch)
+{
+    union REGS r;
+
+    r.h.ah = 0x05;
+    r.h.ch = 0;
+    r.h.cl = (unsigned char)ch;
+    int86(0x16, &r, &r);
 }
 
 static int shot(int scene, const char *path)
@@ -2746,6 +3033,55 @@ static int shot(int scene, const char *path)
             fprintf(out, "%s %d\n", E.name, front_window() == EDIT_WIN);
             fclose(out);
         }
+    } else if (scene == 17) { /* several files selected, with their dates */
+        select_row(1, find_row(1, "PETITE.CFG"));
+        select_rows(1, find_row(1, "PETITE.IDX"), PICK_RANGE);
+        select_rows(1, find_row(1, "LOG.TXT"), PICK_TOGGLE);
+    } else if (scene == 18) { /* File > Info..., read-only switched on */
+        select_row(1, find_row(1, "PETITE.CFG"));
+        stuff_key('r');
+        run(CMD_INFO);
+    } else if (scene == 19) { /* sorting by date, several selected, Info, read-only (tools/dostest.sh) */
+        FILE *out = fopen("C:\\OUT\\MULTI.TXT", "w");
+        unsigned attr = 0;
+        int k, d;
+
+        if (out == NULL)
+            return 0;
+        enter_dir(1, "MULTI");
+        run(CMD_BY_DATE);
+        for (k = 0; k < A.win[1].nrows; k++) /* newest first, folders before files */
+            fprintf(out, "%s ", A.win[1].rows[k].name);
+        fprintf(out, "\n");
+        run(CMD_BY_NAME);
+        select_row(1, find_row(1, "A.TXT"));
+        select_rows(1, find_row(1, "C.TXT"), PICK_RANGE);  /* A, B, C */
+        select_rows(1, find_row(1, "B.TXT"), PICK_TOGGLE); /* not B */
+        select_rows(1, find_row(1, "SUB"), PICK_TOGGLE);   /* and SUB */
+        fprintf(out, "%d %s\n", selected_count(1), A.win[1].rows[A.win[1].sel].name);
+        collect_batch(1);
+        transfer(A.win[1].path, "D:\\", NULL, 0);          /* copied to D: together */
+        fprintf(out, "%d %d %d %d\n", fo_exists("D:\\A.TXT"), fo_exists("D:\\B.TXT"),
+                fo_exists("D:\\C.TXT"), fo_exists("D:\\SUB\\D.TXT"));
+        select_row(1, find_row(1, "A.TXT"));
+        stuff_key('r');                                     /* Info: R, then Enter */
+        stuff_key(13);
+        run(CMD_INFO);
+        _dos_getfileattr("C:\\MULTI\\A.TXT", &attr);
+        fprintf(out, "%d\n", (attr & _A_RDONLY) != 0);
+        select_row(1, find_row(1, "A.TXT"));
+        delete_selected(1);                                 /* read-only, but asked for: it goes */
+        fprintf(out, "%d %d\n", fo_exists("C:\\MULTI\\A.TXT"), A.alert_on);
+        open_drive('D');                                    /* and everything on D: deleted */
+        d = front_window();
+        run(CMD_SELECT_ALL);
+        fprintf(out, "%d ", selected_count(d));
+        delete_selected(d);
+        fprintf(out, "%d\n", A.win[d].nrows);
+        fclose(out);
+    } else if (scene == 20) { /* the System menu, Quit highlighted */
+        open_menu(0);
+        set_hot(COUNT(system_items) - 1);
     } else if (scene == 9) { /* System > About */
         run(CMD_ABOUT);
     } else if (scene == 3) {

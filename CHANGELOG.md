@@ -2,6 +2,22 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.10.0] - 2026-11-26
+
+The details: the fourth step of the [roadmap](ROADMAP.md).
+
+### Added
+
+- **Dates:** each file's and folder's date, in a column at the right when the window is wide enough, and **View › By date** (newest first) beside By name and By size.
+- **Selecting several files:** Shift-click selects from the last click, Ctrl-click adds or takes away one, Shift with the arrows extends, and Edit › Select all (Ctrl+A) takes everything but `..`. Copy, Move, Delete and dragging act on all of them, asking about any clash before starting and showing one progress box for the lot.
+- **File › Info…** for a file or folder: its size, date and time, and attributes, with **read-only** and **hidden** as check boxes (a click, or R and H) that OK sets. System and archive are shown. Hidden files show dimmed in the list.
+- **System › Quit** (Ctrl+Q), as well as File › Quit.
+- `/SHOT=17` (several selected), `/SHOT=18` (the Info box), `/SHOT=20` (the System menu) and `/SHOT=19` (sorting by date, selecting, copying, Info and deleting, checked by `tools/dostest.sh`); host tests for the date and time formats.
+
+### Changed
+
+- Rename, Info, Open as text and Run… are for one item: with several selected they're greyed out.
+
 ## [0.9.0] - 2026-11-26
 
 Editing common files: the third step of the [roadmap](ROADMAP.md).
@@ -170,6 +186,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.10.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.10.0
 [0.9.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.9.0
 [0.8.1]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.1
 [0.8.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.0

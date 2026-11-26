@@ -457,6 +457,7 @@ static void draw_scrollbar(const Win *w, const WinParts *p, int active)
 }
 
 enum { ROW_FILE, ROW_DIR, ROW_GAME };
+#define DATE_W (10 * 8) /* "1994/03/12" */
 
 /* A row's name, right-hand column (size or year) and icon. */
 #define NAME_X(p) ((p)->list.x + 8 + 16 + 8) /* after the icon */
@@ -669,7 +670,7 @@ void draw_window(int i)
     WinParts p;
     int active = i == front_window(), x = w->r.x, y = w->r.y;
     int r, k, tx, tw, ry, nx, name_w = 0;
-    int right_w = 0, right_x, show_right, max_chars;
+    int right_w = 0, right_x, show_right, max_chars, date_x, show_date;
     uint8_t tc, c;
     char buf[24], right[24], name[40], title[72];
     const char *info_right;
@@ -744,8 +745,8 @@ void draw_window(int i)
         return;
     }
 
-    /* Rows, clipped to the list. The right column (sizes) shows if it fits beside the widest
-     * name; names too long for the space are cut short. */
+    /* Rows, clipped to the list. The sizes show if they fit beside the widest name, and the
+     * dates at the right if they fit too; names too long for the space are cut short. */
     {
         for (k = 0; k < w->nrows; k++) {
             name_w = imax(name_w, gfx_text_w(w->rows[k].name));
@@ -755,7 +756,9 @@ void draw_window(int i)
         }
     }
     nx = p.list.x + 8 + 16 + 8;
-    right_x = p.list.x + p.list.w - 8;
+    date_x = p.list.x + p.list.w - 8 - DATE_W;
+    show_date = nx + name_w + 16 + right_w + 16 + DATE_W <= p.list.x + p.list.w - 8;
+    right_x = show_date ? date_x - 16 : p.list.x + p.list.w - 8;
     show_right = nx + name_w + 16 + right_w <= right_x;
     max_chars = ((show_right ? right_x - right_w - 16 : right_x) - nx) / 8;
 
@@ -764,7 +767,7 @@ void draw_window(int i)
     if (!rect_empty(&list)) {
         gfx_set_clip(&list);
         for (k = w->top; k < w->nrows && k - w->top <= p.visible; k++) {
-            int sel = k == w->sel, kind;
+            int sel = ROW_SELECTED(w, k), kind, hidden = (w->rows[k].attrib & 0x02) != 0; /* _A_HIDDEN */
             const uint16_t *line_mask, *fill_mask;
 
             row_text(w, k, name, right, &kind);
@@ -780,9 +783,13 @@ void draw_window(int i)
                      sel ? T->sel : (kind == ROW_DIR ? T->folder_fill : T->file_fill));
             gfx_mask(p.list.x + 8, ry, line_mask, ICON_ROWS, 16,
                      sel ? T->sel_text : (kind == ROW_DIR ? T->folder_line : T->file_line));
-            gfx_text(nx, ry, name, c, 0);
+            text_dim(nx, ry, name, hidden && !sel, c); /* hidden files dimmed */
             if (show_right && right[0])
                 gfx_text(right_x - gfx_text_w(right), ry, right, c, 0);
+            if (show_date && strcmp(name, "..") != 0) {
+                fmt_date(w->rows[k].date, buf);
+                gfx_text(date_x, ry, buf, c, 0);
+            }
         }
         gfx_set_clip(&old_clip);
     }
@@ -883,22 +890,33 @@ static void button(const Rect *b, const char *label, int def)
     gfx_text(b->x + (b->w - gfx_text_w(label)) / 2, b->y + 2, label, T->text, 0);
 }
 
-void draw_alert(void)
+/* A dialog's box: its shadow, a double frame, and the background. */
+static void dialog_frame(const Rect *r)
 {
-    const Alert *a = &A.alert;
-    const Rect *r = &a->r;
-    int body = imax(ALERT_ICON_H, 2 * ROW_H), cy = r->y + 3 + 8, ax = r->x + ALERT_PAD, tx, ly, i;
-
     shadow(r->x, r->y, r->w, r->h);
     gfx_fill(r->x, r->y, r->w, r->h, T->dialog_bg);
     gfx_frame(r->x, r->y, r->w, r->h, T->frame);
     vline(r->x + 1, r->y, r->h, T->frame);
     vline(r->x + r->w - 2, r->y, r->h, T->frame);
     gfx_frame(r->x + 4, r->y + 3, r->w - 8, r->h - 6, T->frame);
+}
 
-    gfx_fill(ax, cy, ALERT_ICON_W, ALERT_ICON_H, T->alert_bg);
-    gfx_frame(ax, cy, ALERT_ICON_W, ALERT_ICON_H, T->frame);
-    gfx_text(ax + (ALERT_ICON_W - 8) / 2, cy + 3, "!", T->alert_text, 0);
+/* The alert's icon: a sign with mark on it. */
+static void dialog_icon(int x, int y, const char *mark)
+{
+    gfx_fill(x, y, ALERT_ICON_W, ALERT_ICON_H, T->alert_bg);
+    gfx_frame(x, y, ALERT_ICON_W, ALERT_ICON_H, T->frame);
+    gfx_text(x + (ALERT_ICON_W - 8) / 2, y + 3, mark, T->alert_text, 0);
+}
+
+void draw_alert(void)
+{
+    const Alert *a = &A.alert;
+    const Rect *r = &a->r;
+    int body = imax(ALERT_ICON_H, 2 * ROW_H), cy = r->y + 3 + 8, ax = r->x + ALERT_PAD, tx, ly, i;
+
+    dialog_frame(r);
+    dialog_icon(ax, cy, "!");
 
     tx = ax + ALERT_ICON_W + 12;
     ly = cy + (body - 2 * ROW_H) / 2 + 1;
@@ -960,14 +978,74 @@ void draw_input(void)
     const Input *in = &A.input;
     const Rect *r = &in->r;
 
-    shadow(r->x, r->y, r->w, r->h);
-    gfx_fill(r->x, r->y, r->w, r->h, T->dialog_bg);
-    gfx_frame(r->x, r->y, r->w, r->h, T->frame);
-    vline(r->x + 1, r->y, r->h, T->frame);
-    vline(r->x + r->w - 2, r->y, r->h, T->frame);
-    gfx_frame(r->x + 4, r->y + 3, r->w - 8, r->h - 6, T->frame);
+    dialog_frame(r);
     gfx_text(in->f.x, r->y + 3 + 8, in->prompt, T->text, 0);
     draw_input_field();
+    button(&in->b[0], "Cancel", 0);
+    button(&in->b[1], "OK", 1);
+}
+
+/* ---- File > Info ---- */
+
+#define CHECK_W 20 /* a check box, 20 x 8: square-looking at 2.4:1 */
+#define CHECK_H 8
+static const char *const CHECK_LABEL[2] = { "Read-only", "Hidden" };
+
+/* The icon, then four lines (name, size, date, the other attributes), the two check boxes,
+ * and Cancel and OK. */
+void info_layout(void)
+{
+    Info *in = &A.info;
+    int text_w = imax(imax(gfx_text_w(in->name), gfx_text_w(in->size)), imax(gfx_text_w(in->date), gfx_text_w(in->also)));
+    int checks_w = 2 * (CHECK_W + 8) + gfx_text_w(CHECK_LABEL[0]) + gfx_text_w(CHECK_LABEL[1]) + 24;
+    int bw = gfx_text_w("Cancel") + 16, w, h, x, y, tx, cy, k;
+
+    w = SNAP8_UP(ALERT_PAD * 2 + ALERT_ICON_W + 12 + imax(text_w, checks_w));
+    h = 3 + 8 + 4 * ROW_H + 6 + ROW_H + 8 + BUTTON_H + 8;
+    x = SNAP8((SCREEN_W - w) / 2);
+    y = (SCREEN_H - h) / 2 + 6;
+    in->r = rect_make(x, y, w, h);
+    tx = x + ALERT_PAD + ALERT_ICON_W + 12;
+    cy = y + 3 + 8 + 4 * ROW_H + 6;
+    for (k = 0; k < 2; k++) { /* the box and its label: a click on either */
+        in->check[k] = rect_make(tx, cy - 1, CHECK_W + 8 + gfx_text_w(CHECK_LABEL[k]), ROW_H);
+        tx += in->check[k].w + 24;
+    }
+    in->b[1] = rect_make(x + w - ALERT_PAD - bw, cy + ROW_H + 8, bw, BUTTON_H);
+    in->b[0] = rect_make(in->b[1].x - 16 - bw, in->b[1].y, bw, BUTTON_H);
+}
+
+void draw_info_checks(void)
+{
+    const Info *in = &A.info;
+    int k, on, bx, by;
+
+    for (k = 0; k < 2; k++) {
+        on = k == 0 ? in->read_only : in->hidden;
+        bx = in->check[k].x;
+        by = in->check[k].y + (ROW_H - CHECK_H) / 2;
+        gfx_fill(bx + 1, by + 1, CHECK_W - 2, CHECK_H - 2, T->win_bg);
+        gfx_frame(bx, by, CHECK_W, CHECK_H, T->frame);
+        if (on)
+            gfx_mask(bx + 2, by + 1, check_mask, ICON_ROWS - 1, 16, T->text);
+    }
+}
+
+void draw_info(void)
+{
+    const Info *in = &A.info;
+    const Rect *r = &in->r;
+    int cy = r->y + 3 + 8, tx = r->x + ALERT_PAD + ALERT_ICON_W + 12, k;
+
+    dialog_frame(r);
+    dialog_icon(r->x + ALERT_PAD, cy, "i");
+    gfx_text(tx, cy + 1, in->name, T->text, 0);
+    gfx_text(tx, cy + 1 + ROW_H, in->size, T->text, 0);
+    gfx_text(tx, cy + 1 + 2 * ROW_H, in->date, T->text, 0);
+    gfx_text(tx, cy + 1 + 3 * ROW_H, in->also, T->text, 0);
+    for (k = 0; k < 2; k++)
+        gfx_text(in->check[k].x + CHECK_W + 8, in->check[k].y + 1, CHECK_LABEL[k], T->text, 0);
+    draw_info_checks();
     button(&in->b[0], "Cancel", 0);
     button(&in->b[1], "OK", 1);
 }

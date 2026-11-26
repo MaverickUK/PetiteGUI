@@ -14,7 +14,7 @@ A small mouse based desktop for CGA and EGA PCs designed for simple file managem
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
-**Status:** 0.9.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
+**Status:** 0.10.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
 ## CGA, EGA and VGA support
 
@@ -31,7 +31,8 @@ A small mouse based desktop for CGA and EGA PCs designed for simple file managem
 - **Running software:** double-click a program to run it, **File › Run…** for a command line, or **File › DOS prompt**; PetiteGUI swaps itself out of memory while anything runs, leaving about 2 KB.
 - **A text editor** for TXT, INI and CFG files, AUTOEXEC.BAT and CONFIG.SYS (double-click one), or any file with **Open as text**, or a new file (Ctrl+N). Select with Shift and the arrows or by dragging; cut, copy and paste (Ctrl+X, Ctrl+C, Ctrl+V); find (Ctrl+F, then F3 for the next). It saves with Ctrl+S (or **Save as…** somewhere new) and asks before throwing changes away.
 - **Right-click menus** on files (Open, Open as text, Run, Info, Rename, Copy, Move, Delete) and games (Run, Run setup, Game info).
-- **Looking after files:** rename (F2), new folder (F7), copy (F5), move (F6) and delete, for files and whole folders, from the File menu, the right-click menu, or by dragging onto another window or a drive's icon. Big jobs show their progress, and Esc stops them.
+- **Looking after files:** rename (F2), new folder (F7), copy (F5), move (F6) and delete, for files and whole folders, from the File menu, the right-click menu, or by dragging onto another window or a drive's icon. Shift-click, Ctrl-click, Shift with the arrows or Ctrl+A select several to copy, move, drag or delete together. Big jobs show their progress, and Esc stops them.
+- **Each file's date**, and sorting by name, size or date (the View menu). **Info** (Ctrl+I) shows a file's size, date and attributes, and switches read-only and hidden; hidden files show dimmed.
 - **Nine screensavers** (the **Saver** menu): colour cycling, blank, a starfield, lines, a maze that builds and solves itself, the desktop melting, Life grown from the desktop, a showcase of your GameMinder games, and a clock.
 - **The pointer**, drawn by the DOS mouse driver, as a squat arrow to suit the tall pixels.
 - **Your games**, from GameMinder's metadata: see below.
@@ -73,7 +74,7 @@ After a few idle minutes (the **Saver** menu: 1, 5 or 15; 5 to start with) the c
 3. `tools/run.sh` runs it on an emulated CGA, at roughly an IBM PC/XT's speed; `tools/run.sh ink` on an EGA.
 4. On a real PC: copy `PETITE.EXE` over, load a mouse driver (`MOUSE.COM` or `CTMOUSE`), run `PETITE` (`/CGA` or `/EGA` to choose the look).
 
-Keys: Enter opens (a folder, a text file, a program, a game), Ctrl+R runs a command, Ctrl+D opens a DOS prompt, Backspace goes up a folder, Ctrl+E opens as text, Ctrl+N a new text file, Ctrl+S saves, Ctrl+G games, Ctrl+I info, F2 rename, F5 copy, F6 move, F7 new folder, Del or F8 delete, Ctrl+W close, ↑ ↓ select, Esc closes a menu or alert, Ctrl+Q quits. In the editor, the keys edit the text (Shift with the arrows, Home, End, Page Up and Page Down selects), apart from the Ctrl keys above and Ctrl+X cut, Ctrl+C copy, Ctrl+V paste, Ctrl+A select all, Ctrl+F find and F3 find next.
+Keys: Enter opens (a folder, a text file, a program, a game), Ctrl+R runs a command, Ctrl+D opens a DOS prompt, Backspace goes up a folder, Ctrl+E opens as text, Ctrl+N a new text file, Ctrl+S saves, Ctrl+G games, Ctrl+I info, F2 rename, F5 copy, F6 move, F7 new folder, Del or F8 delete, Ctrl+W close, ↑ ↓ select (with Shift, several), Ctrl+A select all, Esc closes a menu or alert, Ctrl+Q quits. In the editor, the keys edit the text (Shift with the arrows, Home, End, Page Up and Page Down selects), apart from the Ctrl keys above and Ctrl+X cut, Ctrl+C copy, Ctrl+V paste, Ctrl+A select all, Ctrl+F find and F3 find next.
 
 Command line: `PETITE /SCAN` scans for games at once, `/DRIVES` lists the drives it finds, `/LIST` prints them, `/RUN=name` runs the first whose name contains *name*, `/MEM` shows what a swap leaves for a game, and `/SET=key:value` changes a setting (`/SET=saver:clock`).
 

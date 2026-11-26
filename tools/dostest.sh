@@ -30,6 +30,11 @@ cp build/PETITE.EXE "$work/GUI/"
 printf 'scanpath:C:\\GAMES\\MEMTEST\n' > "$work/GUI/PETITE.CFG"
 printf 'one\r\ntwo\r\n' > "$work/OUT/EDIT.TXT"
 printf 'FILES=30\r\n' > "$work/OUT/CONFIG.SYS"
+mkdir -p "$work/MULTI/SUB" # for selecting several: by name A B C, by date A C B
+for f in A B C SUB/D; do echo "$f" > "$work/MULTI/$f.TXT"; done
+touch -d 2003-03-03 "$work/MULTI/A.TXT"
+touch -d 2001-01-01 "$work/MULTI/B.TXT"
+touch -d 2002-02-02 "$work/MULTI/C.TXT"
 mkdir -p "$work/SET"
 cp build/PETITE.EXE "$work/SET/"
 printf '; my settings\nscanpath:C:\\GAMES\nSaver: clock\n; the end\n' > "$work/SET/PETITE.CFG"
@@ -72,6 +77,7 @@ PETITE /DRIVES > C:\\OUT\\DRIVES.TXT
 PETITE /EGA /SHOT=13 /DUMP=C:\\OUT\\FILEOPS.BIN > C:\\OUT\\FILEOPSO.TXT
 PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
 PETITE /CGA /SHOT=16 /DUMP=C:\\OUT\\EDITOPS.BIN > C:\\OUT\\EDITOPSO.TXT
+PETITE /EGA /SHOT=19 /DUMP=C:\\OUT\\MULTI.BIN > C:\\OUT\\MULTIO.TXT
 PETITE /CGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\CCYCLE.BIN
 PETITE /EGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\ECYCLE.BIN
 PETITE /CGA /SAVER=blank /STEPS=60 /DUMP=C:\\OUT\\CBLANK.BIN
@@ -167,6 +173,13 @@ new = open(os.path.join(w, "OUT", "NEW.TXT"), "rb").read() if os.path.exists(os.
 check(new == b"one 2one two three\r\nfour\r\n three\r\nfour", "and saved as NEW.TXT, with CR LF: %r" % new)
 check(ops[1:2] == ["NEW.TXT 0"], "Save as took the new name, nothing left unsaved: %r" % ops[1:2])
 check(ops[2:3] == ["CONFIG.SYS 1"], "CONFIG.SYS opened in the editor from a folder: %r" % ops[2:3])
+multi = read("OUT", "MULTI.TXT").replace("\r", "").split("\n") + [""] * 6
+check(multi[0].split() == ["..", "SUB", "A.TXT", "C.TXT", "B.TXT"], "sorted by date, newest first: %s" % multi[0])
+check(multi[1] == "3 SUB", "Shift-click, then Ctrl-click off and on: three selected: %r" % multi[1])
+check(multi[2] == "1 0 1 1", "the three copied to D: together, and not the fourth: %r" % multi[2])
+check(multi[3] == "1", "Info made a file read-only (R, then Enter)")
+check(multi[4] == "0 0", "and, read-only, it was still deleted when asked to be: %r" % multi[4])
+check(multi[5] == "3 0", "Select all, then Delete, emptied D: %r" % multi[5])
 for k in ["cycle", "blank", "stars", "lines", "maze", "melt", "life", "games", "clock"]:
     for look, size in (("C", 16384), ("E", 64000)):
         p = os.path.join(w, "OUT", look + k.upper()[:7] + ".BIN")

@@ -32,7 +32,12 @@ typedef struct Row {
     char name[13];
     long size;
     uint8_t dir;
+    uint8_t attrib;         /* DOS's: read-only 1, hidden 2, system 4, folder 16, archive 32 */
+    uint8_t picked;         /* selected as one of several (Shift- or Ctrl-click) */
+    unsigned date, time;    /* last written, as DOS packs them */
 } Row;
+
+enum { SORT_NAME, SORT_SIZE, SORT_DATE };
 
 enum { WIN_FILES, WIN_GAMES, WIN_EDIT };
 
@@ -43,7 +48,8 @@ typedef struct Win {
     char path[80];     /* a directory window's, ending in a backslash */
     Row *rows;         /* a directory window's, cap of them */
     int cap;
-    int nrows, sel, top;
+    int nrows, sel, top; /* sel: the selected row, or the last one clicked of several */
+    int anchor;          /* where a Shift-click selects from */
     uint8_t open;
     uint8_t zoomed;    /* filling the screen; normal is the size to go back to */
     Rect normal;
@@ -51,6 +57,9 @@ typedef struct Win {
     uint8_t not_ready; /* the drive couldn't be read */
     long free_kb;
 } Win;
+
+/* Is row k selected? The focus row always is; in a folder window, so is any picked one. */
+#define ROW_SELECTED(w, k) ((k) == (w)->sel || ((w)->kind == WIN_FILES && (w)->rows[k].picked))
 
 /* The parts of a window, worked out from its rectangle. */
 typedef struct WinParts {
@@ -91,6 +100,13 @@ typedef struct Menu {
     int y; /* the right-click menu's top; 0 for the menu bar's */
 } Menu;
 
+/* File > Info...: a file's or folder's details, and its attributes, two of them switchable. */
+typedef struct Info {
+    char name[13], size[32], date[32], also[40];
+    int read_only, hidden;
+    Rect r, check[2], b[2]; /* the box, the two check boxes (with their labels), the buttons */
+} Info;
+
 typedef struct Alert {
     char line1[40], line2[40];
     const char *button[2];
@@ -112,8 +128,9 @@ typedef struct App {
     int alert_on;
     Alert alert;
     Input input;
+    Info info;
     uint8_t __far *alert_save;
-    int sort_by_size;
+    int sort_by; /* SORT_... */
     int has_ega;
     const Theme *theme;
     char clock[6];
@@ -150,5 +167,8 @@ void draw_clock(void);
 void input_layout(void);
 void draw_input(void);       /* the whole box */
 void draw_input_field(void); /* just the field, as it's typed in */
+void info_layout(void);
+void draw_info(void);
+void draw_info_checks(void); /* just the check boxes, as they change */
 
 #endif

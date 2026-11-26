@@ -24,10 +24,10 @@ Each step is a minor version. The numbers are the items' order in the original l
 - [x] **12. Selecting text, and cut, copy and paste** (Shift+arrows; Ctrl+X, Ctrl+C, Ctrl+V), with the clipboard in a DOS block of its own.
 - [x] **13. AUTOEXEC.BAT and CONFIG.SYS** open in the editor on a double-click, rather than running or showing their size.
 
-## 0.10: details
+## 0.10: details (done in 0.10.0)
 
-- [ ] **8. Dates, and selecting several files.** A date column, sorting by date, and Shift-click or Ctrl-click to select several files to copy, move or delete together.
-- [ ] **9. File attributes** in Info: read-only, hidden, system and archive, with read-only and hidden switchable (a file that won't delete is often read-only).
+- [x] **8. Dates, and selecting several files.** A date column, sorting by date, and Shift-click or Ctrl-click to select several files to copy, move or delete together.
+- [x] **9. File attributes** in Info: read-only, hidden, system and archive, with read-only and hidden switchable (a file that won't delete is often read-only).
 
 ## Alongside: smoother, faster drawing
 

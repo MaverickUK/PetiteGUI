@@ -8,6 +8,11 @@
 
 /* 54645 -> "54,645". buf needs 14 characters. */
 void fmt_thousands(long v, char *buf);
+/* A date and a time as DOS packs them (year-1980, month, day in 7, 4 and 5 bits; hours,
+ * minutes, seconds/2 in 5, 6 and 5) -> "1994/03/12" (GameMinder's order) and "10:42".
+ * A date of 0 (none) is "". buf needs 11 characters, and 6. */
+void fmt_date(unsigned date, char *buf);
+void fmt_time(unsigned time, char *buf);
 
 /* Directory paths end with a backslash: "C:\GAMES\KEEN\". */
 /* Go up one level, putting the name left in child (if not NULL). Zero at a drive's root. */

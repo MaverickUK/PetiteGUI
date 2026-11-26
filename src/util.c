@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 #include "util.h"
 
@@ -23,6 +24,20 @@ void fmt_thousands(long v, char *buf)
     for (i = n - 1; i >= 0; i--)
         buf[out++] = tmp[i];
     buf[out] = '\0';
+}
+
+void fmt_date(unsigned date, char *buf)
+{
+    if (date == 0) {
+        buf[0] = '\0';
+        return;
+    }
+    sprintf(buf, "%04u/%02u/%02u", 1980u + ((date >> 9) & 0x7F), (date >> 5) & 0x0F, date & 0x1F);
+}
+
+void fmt_time(unsigned time, char *buf)
+{
+    sprintf(buf, "%02u:%02u", (time >> 11) & 0x1F, (time >> 5) & 0x3F);
 }
 
 int path_parent(char *path, char *child, int child_size)

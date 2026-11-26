@@ -69,6 +69,22 @@ static void test_resize(void)
     CHECK(same(out, 176, 41, 464, 158));     /* no further than the screen */
 }
 
+static void test_dates(void)
+{
+    char buf[16];
+
+    fmt_date((unsigned)((14 << 9) | (3 << 5) | 12), buf); /* 1994-03-12 */
+    CHECK(strcmp(buf, "1994/03/12") == 0);
+    fmt_date((unsigned)((127u << 9) | (12 << 5) | 31), buf); /* the last day DOS has */
+    CHECK(strcmp(buf, "2107/12/31") == 0);
+    fmt_date(0, buf);
+    CHECK(buf[0] == '\0');
+    fmt_time((unsigned)((10 << 11) | (42 << 5) | 7), buf);
+    CHECK(strcmp(buf, "10:42") == 0);
+    fmt_time((unsigned)((23u << 11) | (59 << 5)), buf);
+    CHECK(strcmp(buf, "23:59") == 0);
+}
+
 static void test_thousands(void)
 {
     char buf[16];
@@ -505,6 +521,7 @@ int main(void)
     test_intersect();
     test_union_contains();
     test_thousands();
+    test_dates();
     test_resize();
     test_snap();
     test_gm_split_apply();

@@ -4,7 +4,7 @@
 #include <string.h>
 #include "files.h"
 
-static int sort_by_size;
+static int sort_by;
 
 static int compare_rows(const void *a, const void *b)
 {
@@ -16,18 +16,20 @@ static int compare_rows(const void *a, const void *b)
         return 1;
     if (x->dir != y->dir)
         return x->dir ? -1 : 1;
-    if (sort_by_size && x->size != y->size)
-        return x->size > y->size ? -1 : 1;
+    if (sort_by == SORT_SIZE && x->size != y->size)
+        return x->size > y->size ? -1 : 1; /* biggest first */
+    if (sort_by == SORT_DATE && (x->date != y->date || x->time != y->time)) /* newest first */
+        return x->date != y->date ? (x->date > y->date ? -1 : 1) : (x->time > y->time ? -1 : 1);
     return strcmp(x->name, y->name);
 }
 
-void files_sort(Win *w, int by_size)
+void files_sort(Win *w, int by)
 {
-    sort_by_size = by_size;
+    sort_by = by;
     qsort(w->rows, (size_t)w->nrows, sizeof(Row), compare_rows);
 }
 
-void files_load(Win *w, int by_size)
+void files_load(Win *w, int by)
 {
     char spec[96];
     struct find_t f;
@@ -39,6 +41,7 @@ void files_load(Win *w, int by_size)
     w->truncated = 0;
     w->not_ready = 0;
     w->free_kb = 0;
+    w->anchor = -1;
     sprintf(spec, "%s*.*", w->path);
     rc = _dos_findfirst(spec, _A_SUBDIR | _A_RDONLY | _A_HIDDEN | _A_SYSTEM | _A_ARCH, &f);
     if (rc != 0 && rc != 0x12) /* 12h: no files, an empty directory */
@@ -54,9 +57,13 @@ void files_load(Win *w, int by_size)
         strncpy(r->name, f.name, sizeof r->name - 1);
         r->name[sizeof r->name - 1] = '\0';
         r->size = (long)f.size;
+        r->attrib = f.attrib;
         r->dir = (uint8_t)((f.attrib & _A_SUBDIR) != 0);
+        r->date = f.wr_date;
+        r->time = f.wr_time;
+        r->picked = 0;
     }
     if (!w->not_ready && _dos_getdiskfree((unsigned)((w->path[0] & ~0x20) - 'A' + 1), &df) == 0)
         w->free_kb = (long)df.avail_clusters * df.sectors_per_cluster * df.bytes_per_sector / 1024L;
-    files_sort(w, by_size);
+    files_sort(w, by);
 }

@@ -108,7 +108,9 @@ Dragging a row starts once the pointer moves a few pixels with the button down (
 
 ## Folders
 
-The A: and C: windows list a directory with DOS `findfirst`/`findnext`, up to 160 entries (the info line says "First 160 items" past that), folders first and `..` at the top in a subdirectory. The window's `path` ends with a backslash and is its title, cut from the left when it's too long.
+The A: and C: windows list a directory with DOS `findfirst`/`findnext`, up to 160 entries (the info line says "First 160 items" past that), folders first and `..` at the top in a subdirectory, then by name, size (biggest first) or date (newest first), with each row's date and time as DOS packs them (two 16-bit words). Dates show as `1994/03/12`, GameMinder's order.
+
+A window has one selected row, `sel`, which the keys move and single-item commands use; Shift- and Ctrl-clicks pick more with a flag in each row, so a row is selected if it's `sel` or picked (`ROW_SELECTED`). A plain click clears the flags, so the usual case costs nothing. Copy, Move, Delete and dragging gather the selected names first (`collect_batch`), ask about any clash before starting, then run one progress box for the lot. Info is a dialog of its own, with two check boxes: read-only and hidden switch with `_dos_setfileattr` (`INT 21h` function 4301h), keeping system and archive. The window's `path` ends with a backslash and is its title, cut from the left when it's too long.
 
 While the desktop is up, PetiteGUI answers DOS's critical errors (`INT 24h`) with Fail, so an empty floppy drive makes the window say it isn't ready instead of DOS writing "Abort, Retry, Fail?" over the graphics. That handler is in PetiteGUI's memory, so it's taken out before a game runs and put back after.
 
