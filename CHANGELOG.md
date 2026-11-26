@@ -2,6 +2,20 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.6.0] - 2026-11-26
+
+Resizing windows.
+
+### Added
+
+- **A size box** in each window's bottom-right corner, under its scroll bar: drag it and an outline follows, and the window takes that size when the button is let go. The top-left corner stays put; windows can't be made smaller than 176 x 72 or run off the screen, and their width is a whole number of bytes. Lists stay scrolled within range, the editor shows more or fewer lines and columns, and the Games window fits more or fewer columns.
+- **Zoom:** a double-click on a title bar makes the window fill the screen, and another puts it back as it was.
+- `/SHOT=8` (a window resized and another zoomed); a host test for the resize limits (`rect_resize`).
+
+### Changed
+
+- System › About shows where PetiteGUI lives: github.com/MaverickUK/PetiteGUI (`/SHOT=9`).
+
 ## [0.5.0] - 2026-11-26
 
 Columns in the Games window.
@@ -94,6 +108,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.6.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.6.0
 [0.5.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.5.0
 [0.4.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.4.0
 [0.3.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.3.0

@@ -14,7 +14,7 @@ Back to the [README](../README.md).
 ```sh
 make                # build/PETITE.EXE
 make test           # host unit tests (rectangles, number formatting), with ASan/UBSan
-make shots          # build/shots/{paper,ink}{0,1,2,3,5,6}.png, through DOSBox-X with no window
+make shots          # build/shots/{paper,ink}{0,1,2,3,5,6,8}.png, through DOSBox-X with no window
 tools/shot.sh savers  # build/shots/saver-NAME-{paper,ink}.png
 make dostest        # end-to-end tests in DOSBox-X: scanning, swapping, running games
 tools/run.sh        # try it: Paper on an emulated CGA at about PC/XT speed
@@ -40,7 +40,7 @@ CYCLES=max tools/run.sh   # flat out
 
 ## Screenshots
 
-`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu; 4 and 7 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
+`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu, 8 a window resized and another zoomed, 9 the About box; 4 and 7 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
 
 ## CI
 

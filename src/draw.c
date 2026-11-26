@@ -378,9 +378,10 @@ void window_parts(int i, WinParts *p)
     }
     p->scroll = rect_make(ix + iw - SCROLL_W, top, SCROLL_W, bottom - top);
     p->up = rect_make(p->scroll.x + 1, top, SCROLL_W - 1, ARROW_H);
-    p->down = rect_make(p->scroll.x + 1, bottom - ARROW_H, SCROLL_W - 1, ARROW_H);
+    p->grow = rect_make(p->scroll.x, bottom - GROW_H, SCROLL_W, GROW_H);
+    p->down = rect_make(p->scroll.x + 1, p->grow.y - 1 - ARROW_H, SCROLL_W - 1, ARROW_H);
     p->track = rect_make(p->scroll.x + 1, top + ARROW_H + 1, SCROLL_W - 1,
-                         (bottom - ARROW_H - 1) - (top + ARROW_H + 1));
+                         (p->down.y - 1) - (top + ARROW_H + 1));
     p->list = rect_make(ix, top, iw - SCROLL_W, bottom - top);
     p->visible = (p->list.h - 2) / ROW_H;
 }
@@ -401,6 +402,12 @@ static void draw_scrollbar(const Win *w, const WinParts *p, int active)
     gfx_fill(p->down.x, p->down.y, p->down.w, p->down.h, T->win_bg);
     hline(p->scroll.x, p->down.y - 1, SCROLL_W, T->frame);
     triangle(p->scroll.x + 8, p->down.y + 2, 3, 0, T->frame);
+    /* The size box: one square overlapping a bigger one */
+    gfx_fill(p->grow.x + 1, p->grow.y, SCROLL_W - 1, GROW_H, T->win_bg);
+    hline(p->scroll.x, p->grow.y - 1, SCROLL_W, T->frame);
+    gfx_frame(p->grow.x + 4, p->grow.y + 2, 10, 5, T->frame);
+    gfx_fill(p->grow.x + 4, p->grow.y + 2, 6, 3, T->win_bg);
+    gfx_frame(p->grow.x + 4, p->grow.y + 2, 6, 3, T->frame);
     if (w->nrows <= p->visible)
         return; /* nothing to scroll: no thumb */
     th = imax(6, (int)((long)p->track.h * p->visible / w->nrows));

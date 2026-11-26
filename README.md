@@ -14,7 +14,7 @@ A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the 
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
-**Status:** 0.5.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
+**Status:** 0.6.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
 ## Two looks, one desktop
 
@@ -28,7 +28,7 @@ Both share the layout, the widgets and the 8×8 BIOS font; only the colour table
 ## What it does
 
 - **A menu bar** with drop-down menus: click, or press and drag. Check marks, disabled items and keyboard shortcuts.
-- **Windows** that move (drag the title bar), come to the front, close (the box at the left) and scroll (the arrows, or the track).
+- **Windows** that move (drag the title bar), resize (drag the size box in the bottom-right corner), zoom to fill the screen (double-click the title bar), come to the front, close (the box at the left) and scroll (the arrows, or the track).
 - **Your folders:** double-click A: or C: for a window on the drive, a folder to go into it, and `..` to come back up.
 - **A text editor** for TXT, INI and CFG files (double-click one), or any file with **Open as text**. It saves with Ctrl+S and asks before throwing changes away.
 - **Right-click menus** on files (Open, Open as text, Info, Delete) and games (Run, Run setup, Game info).

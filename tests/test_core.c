@@ -56,6 +56,18 @@ static void test_union_contains(void)
     CHECK(!rect_contains(&a, 9, 15));
 }
 
+static void test_resize(void)
+{
+    Rect r = rect_make(176, 41, 336, 122), out;
+
+    out = rect_resize(&r, 403, 99, 176, 72, 640, 199);
+    CHECK(same(out, 176, 41, 400, 99));      /* the width snaps to whole bytes */
+    out = rect_resize(&r, 50, 10, 176, 72, 640, 199);
+    CHECK(same(out, 176, 41, 176, 72));      /* no smaller than the minimum */
+    out = rect_resize(&r, 900, 900, 176, 72, 640, 199);
+    CHECK(same(out, 176, 41, 464, 158));     /* no further than the screen */
+}
+
 static void test_thousands(void)
 {
     char buf[16];
@@ -386,6 +398,7 @@ int main(void)
     test_intersect();
     test_union_contains();
     test_thousands();
+    test_resize();
     test_snap();
     test_gm_split_apply();
     test_gm_paths();

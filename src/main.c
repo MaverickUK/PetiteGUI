@@ -13,7 +13,8 @@
  *   PETITE /SHOT=n /DUMP=FILE.BIN
  *                     draw scene n (0 desktop, 1 File menu open, 2 alert, 3 games list,
  *                     4 the first game run from the list and back, 5 the editor,
- *                     6 the right-click menu, 7 an edit saved),
+ *                     6 the right-click menu, 7 an edit saved, 8 windows resized and zoomed,
+ *                     9 the About box),
  *                     write video memory to FILE.BIN and quit: tools/shot.sh makes a PNG
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
@@ -557,8 +558,89 @@ static void wait_release(int *x, int *y)
     while (b & 1);
 }
 
-/* Drag an outline of the window; move it when the button is let go. */
-static void drag_window(int i, int mx, int my)
+static void editor_view(void);
+
+/* After a window changes size: keep its list scrolled within range, and the editor's view
+ * the window's size. */
+static void after_resize(int i)
+{
+    Win *w = &A.win[i];
+    WinParts p;
+
+    window_parts(i, &p);
+    if (w->kind == WIN_EDIT) {
+        if (E.open)
+            editor_view();
+        return;
+    }
+    if (w->top > w->nrows - p.visible)
+        w->top = w->nrows - p.visible;
+    if (w->top < 0)
+        w->top = 0;
+}
+
+static void set_window_rect(int i, Rect r)
+{
+    Rect old = window_bounds(i);
+
+    A.win[i].r = r;
+    after_resize(i);
+    redraw(&old);
+    redraw_window(i);
+}
+
+/* Drag the size box: an outline follows the pointer, and the window takes its size when
+ * the button is let go. The top-left corner stays where it is. */
+static void resize_window(int i, int mx, int my)
+{
+    Win *w = &A.win[i];
+    Rect cur = w->r, next;
+    int ox = w->r.x + w->r.w - mx, oy = w->r.y + w->r.h - my, x, y, b;
+
+    mouse_hide();
+    gfx_xor_frame(&cur);
+    mouse_show();
+    for (;;) {
+        mouse_read(&x, &y, &b);
+        next = rect_resize(&w->r, x + ox - w->r.x, y + oy - w->r.y, MIN_WIN_W, MIN_WIN_H,
+                           SCREEN_W - SHADOW_X, SCREEN_H - SHADOW_Y);
+        if (next.w != cur.w || next.h != cur.h) {
+            mouse_hide();
+            gfx_xor_frame(&cur);
+            gfx_xor_frame(&next);
+            mouse_show();
+            cur = next;
+        }
+        if (!(b & 1))
+            break;
+    }
+    mouse_hide();
+    gfx_xor_frame(&cur);
+    mouse_show();
+    if (cur.w != w->r.w || cur.h != w->r.h) {
+        w->zoomed = 0;
+        set_window_rect(i, cur);
+    }
+}
+
+/* Fill the screen, or go back to the size it was. */
+static void zoom_window(int i)
+{
+    Win *w = &A.win[i];
+
+    if (w->zoomed) {
+        w->zoomed = 0;
+        set_window_rect(i, w->normal);
+    } else {
+        w->normal = w->r;
+        w->zoomed = 1;
+        set_window_rect(i, rect_make(0, MENU_H + 1, SCREEN_W - 8, SCREEN_H - MENU_H - 1 - SHADOW_Y));
+    }
+}
+
+/* Drag an outline of the window; move it when the button is let go. Returns whether it
+ * moved. */
+static int drag_window(int i, int mx, int my)
 {
     Win *w = &A.win[i];
     Rect cur = w->r, next, old;
@@ -596,9 +678,12 @@ static void drag_window(int i, int mx, int my)
     if (cur.x != w->r.x || cur.y != w->r.y) {
         old = window_bounds(i);
         w->r = cur;
+        w->zoomed = 0;
         redraw(&old);
         redraw_window(i);
+        return 1;
     }
+    return 0;
 }
 
 /* Repeat an arrow while it's held: once, then after a pause, then about 9 a second. */
@@ -654,7 +739,19 @@ static void press_window(int i, int x, int y)
         if (rect_contains(&p.close, ux, uy))
             run(CMD_CLOSE); /* the editor asks to save first */
     } else if (rect_contains(&p.title, x, y)) {
-        drag_window(i, x, y);
+        static unsigned long last_time;
+        static int last_win = -1;
+        int twice = i == last_win && ticks() - last_time < 9;
+
+        if (!drag_window(i, x, y) && twice) { /* a double-click on the title bar zooms */
+            last_win = -1;
+            zoom_window(i);
+        } else {
+            last_win = i;
+            last_time = ticks();
+        }
+    } else if (rect_contains(&p.grow, x, y)) {
+        resize_window(i, x, y);
     } else if (w->kind == WIN_GAMES && rect_contains(&p.header, x, y)) {
         k = games_heading_at(&p, x);
         wait_release(&ux, &uy);
@@ -963,6 +1060,7 @@ static void fit_games_window(void)
     if (need > 624)
         need = 624;
     w->r.w = need;
+    w->zoomed = 0;
     if (w->r.x + need > 632)
         w->r.x = SNAP8(632 - need);
     if (w->r.x < 0)
@@ -1202,8 +1300,8 @@ static void run(int cmd)
 
     switch (cmd) {
     case CMD_ABOUT:
-        sprintf(line, "PetiteGUI %s", PETITE_VERSION);
-        show_alert(line, "A small desktop for CGA/EGA.", "OK", NULL, CMD_NONE);
+        sprintf(line, "PetiteGUI %s, for CGA and EGA", PETITE_VERSION);
+        show_alert(line, "github.com/MaverickUK/PetiteGUI", "OK", NULL, CMD_NONE);
         break;
     case CMD_OPEN:
         if (f == GAMES_WIN)
@@ -1552,6 +1650,13 @@ static int shot(int scene, const char *path)
         editor_key(0, 117); /* Ctrl+End */
         editor_key('!', 0);
         run(CMD_SAVE);
+    } else if (scene == 8) { /* windows resized: C: smaller, the games list zoomed behind it */
+        open_games();
+        zoom_window(GAMES_WIN);
+        bring_to_front(1);
+        set_window_rect(1, rect_resize(&A.win[1].r, 240, 96, MIN_WIN_W, MIN_WIN_H, SCREEN_W, SCREEN_H));
+    } else if (scene == 9) { /* System > About */
+        run(CMD_ABOUT);
     } else if (scene == 3) {
         open_games();
     } else if (scene == 4) { /* run the first game from the list, then come back (tools/dostest.sh) */

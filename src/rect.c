@@ -53,3 +53,21 @@ Rect rect_union(const Rect *a, const Rect *b)
     y1 = a->y + a->h > b->y + b->h ? a->y + a->h : b->y + b->h;
     return rect_make(x0, y0, x1 - x0, y1 - y0);
 }
+
+Rect rect_resize(const Rect *r, int w, int h, int min_w, int min_h, int max_x, int max_y)
+{
+    Rect out = *r;
+
+    if (w > max_x - r->x)
+        w = max_x - r->x;
+    if (h > max_y - r->y)
+        h = max_y - r->y;
+    w &= ~7;
+    if (w < min_w)
+        w = min_w;
+    if (h < min_h)
+        h = min_h;
+    out.w = w;
+    out.h = h;
+    return out;
+}

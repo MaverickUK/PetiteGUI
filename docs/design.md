@@ -52,7 +52,7 @@ There's no off-screen buffer. When something changes, `redraw()` draws the recta
 
 Menus and alerts are different: they **save the pixels under them** (`gfx_save`) and put them back when they close, which is faster and needs no redraw of what's beneath. Paper's File menu, with its shadow, is about 1.9 KB; Ink's, in four planes, about 7.5 KB.
 
-Dragging a window draws an XOR outline (drawn twice, it leaves the screen as it was), and only moves the window when the button is let go.
+Dragging a window draws an XOR outline (drawn twice, it leaves the screen as it was), and only moves the window when the button is let go. Resizing works the same way from the size box: the outline's bottom-right corner follows the pointer, kept within `rect_resize`'s limits (no smaller than 176 x 72, on the screen, a whole number of bytes wide). A zoomed window remembers its size and place, to go back to.
 
 ## The mouse
 

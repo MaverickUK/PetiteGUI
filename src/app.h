@@ -14,6 +14,9 @@
 #define ARROW_H 7    /* scroll arrow box: 16 x 7 looks square at 2.4:1 */
 #define SHADOW_X 2
 #define SHADOW_Y 1
+#define GROW_H 8       /* the size box, under the scroll bar */
+#define MIN_WIN_W 176  /* the smallest a window can be made */
+#define MIN_WIN_H 72
 
 #define MAX_ROWS 160 /* files a directory window lists */
 #define NUM_WINS 4
@@ -40,6 +43,8 @@ typedef struct Win {
     int cap;
     int nrows, sel, top;
     uint8_t open;
+    uint8_t zoomed;    /* filling the screen; normal is the size to go back to */
+    Rect normal;
     uint8_t truncated; /* more files than cap */
     uint8_t not_ready; /* the drive couldn't be read */
     long free_kb;
@@ -47,7 +52,7 @@ typedef struct Win {
 
 /* The parts of a window, worked out from its rectangle. */
 typedef struct WinParts {
-    Rect title, close, info, header, list, scroll, up, down, track; /* header: the Games window's */
+    Rect title, close, info, header, list, scroll, up, down, track, grow; /* header: the Games window's */
     int visible; /* list rows that fit */
 } WinParts;
 
