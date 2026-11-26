@@ -15,6 +15,7 @@ Back to the [README](../README.md).
 make                # build/PETITE.EXE
 make test           # host unit tests (rectangles, number formatting), with ASan/UBSan
 make shots          # build/shots/{paper,ink}{0,1,2,3,5,6}.png, through DOSBox-X with no window
+tools/shot.sh savers  # build/shots/saver-NAME-{paper,ink}.png
 make dostest        # end-to-end tests in DOSBox-X: scanning, swapping, running games
 tools/run.sh        # try it: Paper on an emulated CGA at about PC/XT speed
 tools/run.sh ink    # Ink on an emulated EGA
@@ -30,7 +31,9 @@ CYCLES=max tools/run.sh   # flat out
 - `!GM_LOG.TXT` gets GameMinder's lines;
 - a missing program is reported, and no swap or batch file is left behind;
 - after a game run from the Games window, the desktop is back;
-- the editor saves a typed line into a CR LF file, keeping CR LF, and leaves no temporary file.
+- the editor saves a typed line into a CR LF file, keeping CR LF, and leaves no temporary file;
+- every screensaver runs 60 steps in Paper and in Ink and returns, having drawn (Blank: having left the screen black);
+- `/SET` changes one setting and adds another, keeping the rest of `PETITE.CFG`.
 
 `KEEP=1 tools/dostest.sh` keeps the DOS drive it made, to look at.
 

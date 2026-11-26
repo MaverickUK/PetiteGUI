@@ -7,6 +7,9 @@
  *   PETITE /LIST      print the games list (scanning if there's no index) and quit
  *   PETITE /RUN=name  run the first game whose name contains name, then quit
  *   PETITE /MEM       print what a swap would leave for a program, and quit
+ *   PETITE /SET=key:value   change one setting in PETITE.CFG, and quit
+ *   PETITE /SAVER=name [/STEPS=n] [/DUMP=FILE.BIN]
+ *                     run a screensaver n steps (300) over the desktop, dump the screen, quit
  *   PETITE /SHOT=n /DUMP=FILE.BIN
  *                     draw scene n (0 desktop, 1 File menu open, 2 alert, 3 games list,
  *                     4 the first game run from the list and back, 5 the editor,
@@ -28,6 +31,7 @@
 #include "gfx.h"
 #include "launch.h"
 #include "mouse.h"
+#include "saver.h"
 #include "swap.h"
 #include "util.h"
 #include "version.h"
@@ -38,8 +42,11 @@ enum {
     CMD_NONE, CMD_ABOUT, CMD_OPEN, CMD_INFO, CMD_NEW_FOLDER, CMD_COPY, CMD_DELETE,
     CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK,
     CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY,
-    CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP
+    CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP,
+    CMD_SAVER_NOW
 };
+#define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
+#define CMD_SAVER_DELAY 400 /* + minutes */
 
 static MenuItem system_items[] = {
     { "About PetiteGUI...", NULL, 0, CMD_ABOUT },
@@ -83,6 +90,25 @@ static MenuItem games_items[] = {
     { "", NULL, MI_SEP, 0 },
     { "Rescan", NULL, 0, CMD_RESCAN },
 };
+static MenuItem saver_items[] = { /* in the order of savers[] in saver.c */
+    { "Start now", NULL, 0, CMD_SAVER_NOW },
+    { "", NULL, MI_SEP, 0 },
+    { "Off", NULL, 0, CMD_SAVER_PICK + 1 },
+    { "Random", NULL, 0, CMD_SAVER_PICK },
+    { "Colour cycle", NULL, 0, CMD_SAVER_PICK + 2 },
+    { "Blank", NULL, 0, CMD_SAVER_PICK + 3 },
+    { "Starfield", NULL, 0, CMD_SAVER_PICK + 4 },
+    { "Lines", NULL, 0, CMD_SAVER_PICK + 5 },
+    { "Maze", NULL, 0, CMD_SAVER_PICK + 6 },
+    { "Melt", NULL, 0, CMD_SAVER_PICK + 7 },
+    { "Life", NULL, 0, CMD_SAVER_PICK + 8 },
+    { "Game showcase", NULL, 0, CMD_SAVER_PICK + 9 },
+    { "Clock", NULL, 0, CMD_SAVER_PICK + 10 },
+    { "", NULL, MI_SEP, 0 },
+    { "After 1 minute", NULL, 0, CMD_SAVER_DELAY + 1 },
+    { "After 5 minutes", NULL, 0, CMD_SAVER_DELAY + 5 },
+    { "After 15 minutes", NULL, 0, CMD_SAVER_DELAY + 15 },
+};
 static MenuItem options_items[] = {
     { "Paper (CGA)", NULL, 0, CMD_PAPER },
     { "Ink (EGA)", NULL, 0, CMD_INK },
@@ -119,7 +145,7 @@ static void sort_windows(void)
 static void app_init(void)
 {
     Win *a = &A.win[0], *c = &A.win[1], *g = &A.win[GAMES_WIN], *e = &A.win[EDIT_WIN];
-    static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Games", "Options" };
+    static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Games", "Saver", "Options" };
     MenuItem *items[NUM_MENUS];
     int counts[NUM_MENUS], i, x = 16;
 
@@ -181,8 +207,10 @@ static void app_init(void)
     counts[2] = COUNT(view_items);
     items[3] = games_items;
     counts[3] = COUNT(games_items);
-    items[4] = options_items;
-    counts[4] = COUNT(options_items);
+    items[4] = saver_items;
+    counts[4] = COUNT(saver_items);
+    items[5] = options_items;
+    counts[5] = COUNT(options_items);
     for (i = 0; i < NUM_MENUS; i++) {
         A.menu[i].title = titles[i];
         A.menu[i].items = items[i];
@@ -211,6 +239,20 @@ static void update_menus(void)
     file_context[2].flags = (uint8_t)(up ? MI_OFF : 0);
     file_items[8].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
     game_context[1].flags = (uint8_t)(game ? 0 : MI_OFF);
+    {
+        int k;
+
+        for (k = 2; k < COUNT(saver_items); k++) {
+            int cmd = saver_items[k].cmd;
+
+            if (saver_items[k].flags & MI_SEP)
+                continue;
+            if (cmd >= CMD_SAVER_DELAY)
+                saver_items[k].flags = (uint8_t)(cmd - CMD_SAVER_DELAY == S.saver_delay ? MI_CHECK : 0);
+            else
+                saver_items[k].flags = (uint8_t)(cmd - CMD_SAVER_PICK - 2 == S.saver ? MI_CHECK : 0);
+        }
+    }
 
     games_items[2].flags = (uint8_t)(game ? 0 : MI_OFF);
     games_items[3].flags = (uint8_t)(game ? 0 : MI_OFF);
@@ -1014,6 +1056,35 @@ static void game_info(void)
     show_alert(g.name, line, "OK", NULL, CMD_NONE);
 }
 
+/* ---- Screensavers ---- */
+
+static void redraw_everything(void)
+{
+    draw_desktop(&FULL);
+}
+
+static void start_saver(int index)
+{
+    mouse_hide();
+    saver_run(index, redraw_everything, 0);
+    draw_desktop(&FULL);
+    mouse_show();
+}
+
+static void choose_saver(int cmd)
+{
+    char minutes[8];
+
+    if (cmd >= CMD_SAVER_DELAY) {
+        S.saver_delay = cmd - CMD_SAVER_DELAY;
+        sprintf(minutes, "%d", S.saver_delay);
+        settings_set("saverdelay", minutes);
+    } else {
+        S.saver = cmd - CMD_SAVER_PICK - 2;
+        settings_set("saver", saver_key(S.saver));
+    }
+}
+
 /* ---- Commands ---- */
 
 static void switch_theme(const Driver *d, const Theme *t)
@@ -1076,6 +1147,13 @@ static void run(int cmd)
         break;
     case CMD_QUIT_NOW:
         A.quit = 1;
+        break;
+    case CMD_SAVER_NOW:
+        start_saver(S.saver == SAVER_OFF ? SAVER_RANDOM : S.saver);
+        break;
+    default:
+        if (cmd >= CMD_SAVER_PICK)
+            choose_saver(cmd);
         break;
     case CMD_GAMES:
         open_games();
@@ -1461,8 +1539,10 @@ static int run_by_name(const char *name)
 int main(int argc, char **argv)
 {
     int i, scene = -1, force = 0, old_mode = video_mode(), x, y, b, prev = 0, ch;
-    int scan = 0, list = 0, mem = 0;
-    const char *run_name = NULL;
+    int scan = 0, list = 0, mem = 0, saver = SAVER_UNKNOWN, mx = -1, my = -1;
+    long saver_steps = 300;
+    unsigned long last_input = 0;
+    const char *run_name = NULL, *set_arg = NULL;
     const char *dump = "SHOT.BIN";
     unsigned long next_clock = 0;
     char clock[6];
@@ -1484,14 +1564,33 @@ int main(int argc, char **argv)
             mem = 1;
         else if (strnicmp(argv[i], "/RUN=", 5) == 0)
             run_name = argv[i] + 5;
+        else if (strnicmp(argv[i], "/SAVER=", 7) == 0)
+            saver = saver_by_key(argv[i] + 7);
+        else if (strnicmp(argv[i], "/STEPS=", 7) == 0)
+            saver_steps = atol(argv[i] + 7);
+        else if (strnicmp(argv[i], "/SET=", 5) == 0 && strchr(argv[i] + 5, ':') != NULL)
+            set_arg = argv[i] + 5;
         else {
-            printf("PetiteGUI %s\nUsage: PETITE [/CGA | /EGA] [/SCAN] [/LIST] [/RUN=name] [/MEM]\n",
+            printf("PetiteGUI %s\nUsage: PETITE [/CGA | /EGA] [/SCAN] [/LIST] [/RUN=name] [/MEM] [/SET=key:value]\n",
                    PETITE_VERSION);
             return 1;
         }
     }
     settings_load(argv[0]);
     old_video_mode = old_mode;
+    if (set_arg != NULL) { /* /SET=key:value: change one setting in PETITE.CFG */
+        char key[16];
+        const char *colon = strchr(set_arg, ':');
+        int n = (int)(colon - set_arg) < (int)sizeof key - 1 ? (int)(colon - set_arg) : (int)sizeof key - 1;
+
+        memcpy(key, set_arg, (size_t)n);
+        key[n] = '\0';
+        if (!settings_set(key, colon + 1)) {
+            printf("Couldn't write PETITE.CFG\n");
+            return 1;
+        }
+        return 0;
+    }
     if (mem)
         return print_memory();
     if (scan || list || run_name != NULL) {
@@ -1510,6 +1609,7 @@ int main(int argc, char **argv)
         return 1;
     }
     draw_init();
+    gfx_has_ega = A.has_ega;
     if (force == 1 || (!force && !A.has_ega)) {
         A.theme = &theme_paper;
         gfx_start(&drv_cga);
@@ -1518,6 +1618,19 @@ int main(int argc, char **argv)
         gfx_start(&drv_ega);
     }
 
+    if (saver != SAVER_UNKNOWN) { /* run a saver for some steps, then dump the screen (tests) */
+        FILE *f;
+
+        draw_desktop(&FULL);
+        saver_run(saver, redraw_everything, saver_steps);
+        f = fopen(dump, "wb");
+        if (f != NULL) {
+            gfx_driver()->dump(f);
+            fclose(f);
+        }
+        set_video_mode(old_mode);
+        return f == NULL;
+    }
     if (scene >= 0) {
         int ok = shot(scene, dump);
 
@@ -1537,8 +1650,22 @@ int main(int argc, char **argv)
     draw_desktop(&FULL);
     mouse_show();
 
+    last_input = ticks();
     while (!A.quit) {
         mouse_read(&x, &y, &b);
+        if (x != mx || y != my || b != 0 || ticks() < last_input) { /* (ticks restart at midnight) */
+            mx = x;
+            my = y;
+            last_input = ticks();
+        }
+        if (S.saver != SAVER_OFF && S.saver_delay > 0 && A.open_menu < 0 && !A.alert_on &&
+            ticks() - last_input >= (unsigned long)S.saver_delay * 1092UL) { /* 18.2 ticks a second */
+            start_saver(S.saver);
+            last_input = ticks();
+            mouse_read(&mx, &my, &b);
+            prev = b;
+            continue;
+        }
         if ((b & 1) && !(prev & 1)) {
             on_press(x, y);
             mouse_read(&x, &y, &b);
@@ -1551,6 +1678,7 @@ int main(int argc, char **argv)
         prev = b;
         if (kbhit()) {
             ch = getch();
+            last_input = ticks();
             on_key(ch);
         }
         if (ticks() >= next_clock) {

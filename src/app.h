@@ -18,7 +18,7 @@
 #define MAX_ROWS 160 /* files a directory window lists */
 #define NUM_WINS 4
 #define NUM_ICONS 4
-#define NUM_MENUS 5    /* on the menu bar */
+#define NUM_MENUS 6    /* on the menu bar */
 #define CONTEXT_MENU NUM_MENUS /* the right-click menu, after them */
 #define GAMES_WIN 2    /* the games list's window */
 #define EDIT_WIN 3     /* the text editor's */

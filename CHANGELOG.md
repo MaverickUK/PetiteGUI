@@ -2,6 +2,29 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.4.0] - 2026-11-26
+
+Screensavers.
+
+### Added
+
+- **Nine screensavers**, in a new **Saver** menu with how long to wait (1, 5 or 15 minutes; 5 by default) and **Start now**. A key, a click or the slightest mouse movement wakes them, and that input doesn't reach the desktop.
+  - **Colour cycle:** a zone plate drawn once, then animated only by turning the palette (Ink's 15 colours, or Paper's ink through all 16), so it costs nothing per frame.
+  - **Blank:** the picture switched off at the video card.
+  - **Starfield**, **Lines** (two shapes on Lissajous curves, XORed, with trails), **Maze** (built, then solved, then a new one).
+  - **Melt** (the desktop slides away a byte-wide column at a time) and **Life** (Conway's, seeded from what's on the desktop).
+  - **Game showcase:** a game from your GameMinder collection every seven seconds, with what it is and how much you've played it.
+  - **Clock:** seven-segment digits and the date, moved each minute.
+  - **Random** picks one (not Blank) each time; **Off** turns them off.
+- `saver` and `saverdelay` in `PETITE.CFG`, written back when they're chosen in the menu, keeping the file's other lines; `/SET=key:value` does the same from the command line.
+- `/SAVER=name /STEPS=n` runs a saver over the desktop and dumps the screen; `tools/shot.sh savers` takes them all; `tools/dostest.sh` runs each in both looks, and checks `/SET`.
+- Host tests for the savers' arithmetic (`src/saverlib.c`): the sine table, Life, the maze (every cell reached, one way between any two, solved), random numbers.
+
+### Changed
+
+- **The medium memory model:** code may now use more than one 64 KB segment (it had reached 62 KB in one). The swap core's entry points are far calls; it's still the first code in memory, and a swap still leaves about 1.8 KB.
+- Video drivers gained the savers' operations: writing a row of pixels, moving byte columns down, XOR spans, reading a pixel, blanking and the palette.
+
 ## [0.3.0] - 2026-11-26
 
 Real folders, a text editor and right-click menus.
@@ -56,6 +79,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.4.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.4.0
 [0.3.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.2.0
 [0.1.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.1.0

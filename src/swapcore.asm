@@ -5,7 +5,7 @@
 ;   May be used freely as long as due credit is given
 ; by way of GameMinder's NASM port for Free Pascal (EXECSWAP/FPC/SWAPCORE.ASM), changed for
 ; Open Watcom C:
-; - a near __cdecl function (the small model), taking C strings rather than Pascal ones;
+; - a far __cdecl function (the medium model), taking C strings rather than Pascal ones;
 ; - it must be the first code in the program: the Makefile links SWAPCORE.OBJ first, so it
 ;   starts the _TEXT segment, right after the PSP. Everything from FirstToSave up (the rest of
 ;   the code, the data, the stack) is copied to EMS or a file, and the program's memory
@@ -42,10 +42,10 @@ InfoFrameSeg      equ   8               ;word - segment of EMS page frame
 InfoFileHandle    equ   10              ;word - DOS handle of swap file
 InfoPrefixSeg     equ   12              ;word - PSP segment
 
-;Parameters (near __cdecl: return address at bp+2)
-ParamPath       equ     4
-ParamCmdLine    equ     8
-ParamInfo       equ     12
+;Parameters (far __cdecl: the return address is 4 bytes, at bp+2)
+ParamPath       equ     6
+ParamCmdLine    equ     10
+ParamInfo       equ     14
 
 ;-----------------------------------------------------------------------------
 ;Variables in CS - they stay resident, so they're before FirstToSave
@@ -151,7 +151,7 @@ _swap_first_seg:
         mov     cx, cs
         add     ax, cx
         pop     cx
-        ret
+        retf
 
 ;-----------------------------------------------------------------------------
 _swap_core:
@@ -398,7 +398,7 @@ ESDone: cli                             ;Switch back to original stack
         pop     bx
         mov     ax, [cs:Status]         ;Return status
         pop     bp
-        ret                             ;Near __cdecl: the caller removes the parameters
+        retf                            ;Far __cdecl: the caller removes the parameters
 
 ;-----------------------------------------------------------------------------
 ;Everything from here up is swapped out

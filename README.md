@@ -14,7 +14,7 @@ A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the 
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
-**Status:** 0.3.0: the basics, real folders, a text editor and GameMinder's games. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
+**Status:** 0.4.0: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
 ## Two looks, one desktop
 
@@ -33,6 +33,7 @@ Both share the layout, the widgets and the 8×8 BIOS font; only the colour table
 - **A text editor** for TXT, INI and CFG files (double-click one), or any file with **Open as text**. It saves with Ctrl+S and asks before throwing changes away.
 - **Right-click menus** on files (Open, Open as text, Info, Delete) and games (Run, Run setup, Game info).
 - **Alerts** with a default button. File › Delete… asks first, then deletes the file.
+- **Nine screensavers** (the **Saver** menu): colour cycling, blank, a starfield, lines, a maze that builds and solves itself, the desktop melting, Life grown from the desktop, a showcase of your GameMinder games, and a clock.
 - **The pointer**, drawn by the DOS mouse driver, as a squat arrow to suit the tall pixels.
 - **Your games**, from GameMinder's metadata: see below.
 
@@ -51,9 +52,19 @@ Settings go in `PETITE.CFG`, next to `PETITE.EXE`, as `key:value` lines like Gam
 scanpath:C:\GAMES;D:\GAMES
 useems:true
 playstats:true
+saver:random
+saverdelay:5
 ```
 
+`saver` is `off`, `random`, `cycle`, `blank`, `stars`, `lines`, `maze`, `melt`, `life`, `games` or `clock`; the Saver menu sets it and `saverdelay` (minutes) for you.
+
 `scanpath` defaults to the whole of `C:\`. Swap and launch files go in `%TEMP%`, or next to `PETITE.EXE`.
+
+## Screensavers
+
+<img src="docs/img/savers.png" alt="Eight screensavers in Ink: a zone plate, stars, crossing lines, a maze being solved, the desktop melting, Life, a game from the collection and a clock; then four in Paper" width="800">
+
+After a few idle minutes (the **Saver** menu: 1, 5 or 15; 5 to start with) the chosen saver runs until a key, a click or the mouse moves. They're built for the hardware: **Colour cycle** draws its rings once and then only turns the palette, so it runs as smoothly on an 8088 as on a 486; **Blank** switches the picture off at the card; **Melt** moves whole bytes; the **Game showcase** reads your GameMinder index and play logs, and never scans. **Random**, the default, picks a different one each time (never Blank).
 
 ## Quick start
 
@@ -64,7 +75,7 @@ playstats:true
 
 Keys: Enter opens (a folder, a text file, a game), Backspace goes up a folder, Ctrl+E opens as text, Ctrl+S saves, Ctrl+G games, Ctrl+I info, Del delete, Ctrl+W close, ↑ ↓ select, Esc closes a menu or alert, Ctrl+Q quits. In the editor, the keys edit the text, apart from Ctrl+G, Ctrl+O, Ctrl+S, Ctrl+W and Ctrl+Q.
 
-Command line: `PETITE /SCAN` scans for games at once, `/LIST` prints them, `/RUN=name` runs the first whose name contains *name*, and `/MEM` shows what a swap leaves for a game.
+Command line: `PETITE /SCAN` scans for games at once, `/LIST` prints them, `/RUN=name` runs the first whose name contains *name*, `/MEM` shows what a swap leaves for a game, and `/SET=key:value` changes a setting (`/SET=saver:clock`).
 
 ## Documents
 

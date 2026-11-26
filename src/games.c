@@ -5,6 +5,7 @@
 #include <string.h>
 #include "games.h"
 #include "gminfo.h"
+#include "saver.h"
 
 #define CONFIG_FILE "PETITE.CFG"
 #define INDEX_FILE "PETITE.IDX"
@@ -28,6 +29,8 @@ void settings_load(const char *argv0)
     strcpy(S.scan_path, "C:\\");
     S.use_ems = 1;
     S.play_stats = 1;
+    S.saver = SAVER_RANDOM;
+    S.saver_delay = 5;
     slash = strrchr(argv0, '\\');
     if (slash != NULL && slash - argv0 < (int)sizeof S.exe_dir - 1) {
         memcpy(S.exe_dir, argv0, (size_t)(slash - argv0 + 1));
@@ -56,8 +59,50 @@ void settings_load(const char *argv0)
             S.use_ems = stricmp(value, "false") != 0;
         else if (strcmp(key, "PLAYSTATS") == 0)
             S.play_stats = stricmp(value, "false") != 0;
+        else if (strcmp(key, "SAVER") == 0 && saver_by_key(value) != SAVER_UNKNOWN)
+            S.saver = saver_by_key(value);
+        else if (strcmp(key, "SAVERDELAY") == 0)
+            S.saver_delay = atoi(value);
     }
     fclose(f);
+}
+
+int settings_set(const char *key, const char *value)
+{
+    static char text[2048];
+    char path[128], line[200], k[16], v[128];
+    size_t used = 0, n;
+    int found = 0;
+    FILE *f;
+
+    sprintf(path, "%s%s", S.exe_dir, CONFIG_FILE);
+    f = fopen(path, "r");
+    if (f != NULL) {
+        while (fgets(line, sizeof line, f) != NULL) {
+            if (gm_split(line, k, sizeof k, v, sizeof v) && stricmp(k, key) == 0) {
+                if (found)
+                    continue; /* only one of each */
+                sprintf(line, "%s:%s\n", key, value);
+                found = 1;
+            }
+            n = strlen(line);
+            if (used + n + 1 >= sizeof text)
+                break;
+            memcpy(text + used, line, n);
+            used += n;
+        }
+        fclose(f);
+    }
+    if (!found) {
+        if (used > 0 && text[used - 1] != '\n')
+            text[used++] = '\n';
+        used += (size_t)sprintf(text + used, "%s:%s\n", key, value);
+    }
+    f = fopen(path, "w");
+    if (f == NULL)
+        return 0;
+    n = fwrite(text, 1, used, f);
+    return fclose(f) == 0 && n == used;
 }
 
 /* ---- The list ---- */

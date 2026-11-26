@@ -17,6 +17,8 @@ swap.c     EMS or the swap file, then swapcore.asm, which runs the game
 files.c    a directory window's listing (findfirst/findnext)
 edit.c     the text editor: opening, saving, keys, the view
 textbuf.c  its gap buffer, pure C (host tested)
+saver.c    the screensavers: choosing, running, waking; savers_*.c the nine of them
+saverlib.c their arithmetic, pure C (host tested): sine, Life, the maze, random numbers
 ```
 
 A **driver** (`gfx.h`'s `Driver`) knows one mode's memory layout and nothing else; it gets coordinates already clipped to the screen. **gfx** clips everything to the current clip rectangle first, so the widgets can draw anywhere. A **theme** (`theme.c`) is the colour table the widgets use. Paper is `drv_cga` with `theme_paper`, Ink is `drv_ega` with `theme_ink`: every widget is shared.
@@ -60,7 +62,7 @@ The program polls: `mouse_read` (function 3) for the position and buttons, `kbhi
 
 ## Memory
 
-Small model: up to 64 KB of code and 64 KB of data. Open Watcom's startup shrinks the program's DOS memory block to just the program (about 66 KB with its 8 KB stack), so the rest of conventional memory is free.
+Medium model: code in as many 64 KB segments as it needs (it passed 62 KB in one with the screensavers), and 64 KB of data with the stack. Open Watcom's startup shrinks the program's DOS memory block to just the program (about 66 KB with its 8 KB stack), so the rest of conventional memory is free.
 
 Anything else PetiteGUI needs comes from DOS directly (`_dos_allocmem`): the pixels under a menu or alert, and the games list (500 games, 61 KB). Not from the C far heap: Open Watcom's `_ffree` keeps freed blocks for reuse, and a block kept would sit under a game while it runs.
 
@@ -89,6 +91,24 @@ One file at a time, up to 60,000 bytes, in a DOS memory block with 16 KB to grow
 The editor keeps its caret and view as character positions and line numbers, updated as it goes rather than counted from the start of the file at each key. A key redraws only the caret's old and new rows, unless the view scrolled or a line was added or removed.
 
 Saving writes `PETITE.$$$` beside the file, then replaces the file with it, so a full disk leaves the file as it was. Before a game runs, the editor's text is freed (with any changes saved first: it won't run a game until they are) and read back after, at the same place.
+
+## Screensavers
+
+The main loop notes the BIOS tick count whenever the mouse moves, a button is down or a key arrives; once `saverdelay` minutes pass with none (and no menu or alert open) it runs the saver. `saver_run` calls the saver's `step` until there's a key (eaten), a button, or motion: the mouse driver's motion counters (`INT 33h` function `0Bh`) see a nudge too small to move the pointer. Then the desktop is redrawn from scratch, since saving Ink's 64 KB screen first would cost more than drawing it.
+
+Each step is a frame, paced by the vertical retrace (port `3DAh` bit 3), so savers run at the same speed on fast machines and as fast as they can on slow ones. What each leans on:
+
+| Saver | How |
+|---|---|
+| Colour cycle | A zone plate, every pixel's colour its squared distance from the middle in bands (worked out with additions only), written once a row at a time. After that only the palette moves: INT 10h AX=1002h for Ink's 16 registers, or Paper's one ink colour (the CGA's colour select register, port `3D9h`, or palette register 1 on an EGA or VGA). |
+| Blank | The EGA attribute controller with its palette disconnected, or the CGA mode register with video off; the screen is cleared first, for cards that ignore both. |
+| Starfield | 110 points in space, x/z and y/z on screen (y squashed for the tall pixels), 2-3 pixels wide. |
+| Lines | Corners on Lissajous curves from a 256-step sine table (made with whole numbers by Taylor series: there may be no FPU); lines are XORed a row's run at a time, so the oldest of the trail can be drawn again to remove it. |
+| Maze | A random depth-first search a step at a time, then another to solve it, on 16 x 7 blocks (square on the screen, and whole bytes). |
+| Melt | Byte-wide columns moved down a few rows at a time: a memory copy per row on the CGA, write mode 1 (all four planes through the latches) on the EGA. |
+| Life | 80 x 50 cells of 8 x 4 pixels; a cell starts alive where the screen is black at pixels the desktop pattern always lights, so windows, frames and text seed it. Only cells that change are drawn. |
+| Game showcase | The games index (never a scan), each game's `!GM_INFO.TXT` and `!GM_LOG.TXT`, in the BIOS font scaled up. |
+| Clock | Filled rectangles for segments, redrawn somewhere new each minute; the colon blinks with the seconds. |
 
 ## Games
 

@@ -18,6 +18,7 @@ typedef struct SwapInfo {      /* must match the Info offsets in swapcore.asm */
 } SwapInfo;
 #pragma pack(pop)
 
+/* Far functions, as everything is in the medium model. */
 extern unsigned __cdecl swap_core(const char __far *path, const char __far *cmdline, SwapInfo __far *info);
 extern unsigned __cdecl swap_first_seg(void);
 

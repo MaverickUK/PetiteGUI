@@ -31,10 +31,25 @@ typedef struct Driver {
     void (*restore)(int x, int y, int w, int h, const uint8_t __far *buf);
     /* Write video memory as it is laid out (for screenshots). Non-zero on success. */
     int (*dump)(FILE *f);
+
+    /* For the screensavers. */
+    /* n pixels of colour indexes from pix; x and n multiples of 8. */
+    void (*put_row)(int x, int y, int n, const uint8_t *pix);
+    /* Move rows y..y+h-1 of the byte-aligned columns x..x+w-1 down by dy. */
+    void (*move_down)(int x, int y, int w, int h, int dy);
+    /* Like span, but XORs colour c into the pixels. */
+    void (*xor_span)(int x, int y, uint16_t bits, int n, uint8_t c);
+    uint8_t (*peek)(int x, int y);
+    /* Turn the picture off (1) or on (0); it stays in video memory. */
+    void (*blank)(int off);
+    /* Show colour index i as CGA colour map[i] (0-15); Paper shows only map[1], its ink. */
+    void (*palette)(const uint8_t *map);
 } Driver;
 
 extern const Driver drv_cga;
 extern const Driver drv_ega;
+/* Set by main: an EGA or VGA is fitted (so Paper's ink and blanking go through it). */
+extern int gfx_has_ega;
 
 extern const uint8_t PAT_CHECKER[2]; /* 50% grey */
 extern const uint8_t PAT_DOTS[2];    /* every other pixel, same on both rows */
@@ -57,6 +72,17 @@ void gfx_text(int x, int y, const char *s, uint8_t c, int dither);
 int gfx_text_w(const char *s);
 /* A 2-pixel-wide inverted outline, for dragging. */
 void gfx_xor_frame(const Rect *r);
+
+/* For the screensavers: on-screen coordinates only (put_row and move_down aren't clipped). */
+void gfx_put_row(int x, int y, int n, const uint8_t *pix);
+void gfx_move_down(int x, int y, int w, int h, int dy);
+void gfx_xor_bits(int x, int y, uint16_t bits, int n, uint8_t c);
+uint8_t gfx_peek(int x, int y);
+void gfx_blank(int off);
+void gfx_palette(const uint8_t *map);
+void gfx_palette_reset(void);
+/* The BIOS font's 8 rows for a character. */
+const uint8_t __far *gfx_glyph(unsigned char ch);
 
 /* Save what's under r (clipped to the screen); NULL if there's no memory. */
 uint8_t __far *gfx_save(const Rect *r);

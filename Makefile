@@ -20,11 +20,12 @@ export WATCOM
 export PATH := $(OWBIN):$(PATH)
 export INCLUDE := $(WATCOM)/h
 
-# -bt=dos: DOS target; -ms: small model (64 KB code, 64 KB data); -0: 8088 instructions only;
-# -ox: optimise; -w4: all warnings; -zq: quiet.
-CFLAGS = -bt=dos -ms -0 -ox -w4 -zq
+# -bt=dos: DOS target; -mm: medium model (code in as many 64 KB segments as it needs, data in
+# one: calls are far, data pointers near); -0: 8088 instructions only; -ox: optimise; -w4: all
+# warnings; -zq: quiet.
+CFLAGS = -bt=dos -mm -0 -ox -w4 -zq
 
-SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c
+SRC = main.c draw.c gfx.c drv_cga.c drv_ega.c mouse.c theme.c rect.c util.c gminfo.c games.c launch.c swap.c files.c edit.c textbuf.c saverlib.c saver.c savers_fx.c savers_grid.c savers_info.c
 # swapcore must come first: it has to be the first code in memory, so that everything after
 # it can be swapped out while a game runs (see src/swapcore.asm).
 OBJ = build/swapcore.obj $(patsubst %.c,build/%.obj,$(SRC))

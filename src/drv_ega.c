@@ -195,8 +195,115 @@ static int ega_dump(FILE *f)
     return ok;
 }
 
+/* Each plane in turn: the map mask picks it, and a byte holds that plane's bit of 8 pixels. */
+static void ega_put_row(int x, int y, int n, const uint8_t *pix)
+{
+    uint8_t __far *row = ROW(y) + (x >> 3);
+    uint8_t v;
+    int plane, i, b;
+
+    defaults();
+    for (plane = 0; plane < 4; plane++) {
+        SEQ(2, 1 << plane);
+        for (i = 0; i < n; i += 8) {
+            v = 0;
+            for (b = 0; b < 8; b++)
+                if (pix[i + b] & (1 << plane))
+                    v |= (uint8_t)(0x80 >> b);
+            row[i >> 3] = v;
+        }
+    }
+    defaults();
+}
+
+/* Write mode 1 copies the latches: reading a byte loads all four planes, writing anything
+ * puts them down elsewhere. */
+static void ega_move_down(int x, int y, int w, int h, int dy)
+{
+    int r, i, nb = w >> 3;
+    volatile uint8_t latch;
+    uint8_t __far *src, __far *dst;
+
+    GC(5, 0x01);
+    for (r = h - 1; r >= 0; r--) {
+        src = ROW(y + r) + (x >> 3);
+        dst = ROW(y + r + dy) + (x >> 3);
+        for (i = 0; i < nb; i++) {
+            latch = src[i];
+            dst[i] = latch;
+        }
+    }
+    defaults();
+}
+
+static void ega_xor_span(int x, int y, uint16_t bits, int n, uint8_t c)
+{
+    uint8_t __far *p = ROW(y) + (x >> 3);
+    int s = x & 7, k;
+    uint8_t b[3];
+    volatile uint8_t latch;
+
+    (void)n;
+    b[0] = (uint8_t)(bits >> (8 + s));
+    b[1] = (uint8_t)(bits >> s);
+    b[2] = (uint8_t)(bits << (8 - s));
+    GC(3, 0x18);
+    GC(0, c);
+    GC(1, 0x0F);
+    for (k = 0; k < 3; k++) {
+        if (b[k] == 0)
+            continue;
+        GC(8, b[k]);
+        latch = p[k];
+        p[k] = 0xFF;
+    }
+    (void)latch;
+    defaults();
+}
+
+static uint8_t ega_peek(int x, int y)
+{
+    uint8_t c = 0, bit = (uint8_t)(0x80 >> (x & 7));
+    int plane;
+
+    for (plane = 0; plane < 4; plane++) {
+        GC(4, plane);
+        if (ROW(y)[x >> 3] & bit)
+            c |= (uint8_t)(1 << plane);
+    }
+    defaults();
+    return c;
+}
+
+static void ega_blank(int off)
+{
+    (void)inp(0x3DA);
+    outp(0x3C0, off ? 0x00 : 0x20);
+}
+
+/* INT 10h AX=1002h sets all 16 palette registers and the border from a 17-byte table. In the
+ * 200-line modes a register holds bits 0-2 RGB and bit 4 intensity, the CGA colours. */
+static void ega_palette(const uint8_t *map)
+{
+    static uint8_t table[17];
+    union REGS r;
+    struct SREGS s;
+    void __far *fp = table;
+    int i;
+
+    for (i = 0; i < 16; i++)
+        table[i] = (uint8_t)((map[i] & 7) | ((map[i] & 8) << 1));
+    table[16] = 0;
+    segread(&s);
+    r.x.ax = 0x1002;
+    s.es = FP_SEG(fp);
+    r.x.dx = FP_OFF(fp);
+    int86x(0x10, &r, &r, &s);
+}
+
 const Driver drv_ega = {
     "Ink (EGA)",
     ega_init, ega_fill, ega_pattern, ega_span, ega_xor_fill,
-    ega_save_size, ega_save, ega_restore, ega_dump
+    ega_save_size, ega_save, ega_restore, ega_dump,
+    ega_put_row, ega_move_down, ega_xor_span, ega_peek, ega_blank, ega_palette
 };

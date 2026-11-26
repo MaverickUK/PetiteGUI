@@ -6,6 +6,9 @@
 #include "../src/util.h"
 #include "../src/gminfo.h"
 #include "../src/textbuf.h"
+#include "../src/saverlib.h"
+#include <math.h>
+#include <stdlib.h>
 
 static int failures, checks;
 
@@ -245,6 +248,92 @@ static void test_textbuf(void)
     CHECK(!crlf && tb_lines(&t) == 2);
 }
 
+static void test_sin(void)
+{
+    int i, worst = 0, err;
+
+    sl_make_sin();
+    for (i = 0; i < 256; i++) {
+        err = abs(sl_sin[i] - (int)lround(16384.0 * sin(i * 2.0 * 3.14159265358979 / 256.0)));
+        if (err > worst)
+            worst = err;
+    }
+    CHECK(worst <= 8); /* within 0.05% of a full swing */
+    CHECK(sl_sin[0] == 0 && sl_sin[64] == 16384 && sl_sin[128] == 0 && sl_sin[192] == -16384);
+}
+
+static void test_rand(void)
+{
+    unsigned i, a, seen[8] = { 0 };
+
+    sl_seed(42);
+    a = sl_rand();
+    sl_seed(42);
+    CHECK(sl_rand() == a);
+    for (i = 0; i < 800; i++)
+        seen[sl_rand_n(8)]++;
+    for (i = 0; i < 8; i++)
+        CHECK(seen[i] > 60 && seen[i] < 140);
+}
+
+static void test_life(void)
+{
+    unsigned char a[36], b[36];
+
+    /* a blinker on a 6x6 grid: period 2 */
+    memset(a, 0, sizeof a);
+    a[2 * 6 + 1] = a[2 * 6 + 2] = a[2 * 6 + 3] = 1;
+    CHECK(sl_life_step(a, b, 6, 6) == 4);
+    CHECK(b[1 * 6 + 2] && b[2 * 6 + 2] && b[3 * 6 + 2] && !b[2 * 6 + 1]);
+    CHECK(sl_life_step(b, a, 6, 6) == 4);
+    CHECK(a[2 * 6 + 1] && a[2 * 6 + 3]);
+
+    /* a block is still; it wraps across the edges */
+    memset(a, 0, sizeof a);
+    a[0] = a[5] = a[30] = a[35] = 1;
+    CHECK(sl_life_step(a, b, 6, 6) == 0);
+}
+
+static void test_maze(void)
+{
+    enum { CW = 19, CH = 13 };
+    unsigned char blocks[(CW * 2 + 1) * (CH * 2 + 1)];
+    SlMaze m;
+    int bx[2], by[2], n, steps = 0, open_walls = 0, x, y, built = 0, path = 0;
+
+    sl_seed(7);
+    sl_maze_start(&m, blocks, CW, CH);
+    while ((n = sl_maze_step(&m, bx, by)) >= 0 && steps < 20000) {
+        steps++;
+        if (m.solving && !built) {
+            built = 1;
+            /* every cell open, and cells - 1 passages: a tree, so one way between any two */
+            for (y = 0; y < CH; y++)
+                for (x = 0; x < CW; x++)
+                    CHECK(blocks[(y * 2 + 1) * m.bw + x * 2 + 1] != MZ_WALL);
+            for (y = 1; y < m.bh - 1; y++)
+                for (x = 1; x < m.bw - 1; x++)
+                    if ((x + y) % 2 == 1 && blocks[y * m.bw + x] != MZ_WALL)
+                        open_walls++;
+            CHECK(open_walls == CW * CH - 1);
+        }
+    }
+    CHECK(built && m.done && steps < 20000);
+    CHECK(blocks[(CH * 2 - 1) * m.bw + CW * 2 - 1] == MZ_PATH); /* reached the last cell */
+    CHECK(blocks[1 * m.bw + 1] == MZ_PATH);
+    for (y = 0; y < m.bh; y++)
+        for (x = 0; x < m.bw; x++)
+            path += blocks[y * m.bw + x] == MZ_PATH;
+    CHECK(path >= CW + CH - 1); /* at least the straight-line distance, in cells and passages */
+    for (x = 0; x < m.bw; x++)
+        CHECK(blocks[x] == MZ_WALL && blocks[(m.bh - 1) * m.bw + x] == MZ_WALL); /* a closed border */
+}
+
+static void test_segments(void)
+{
+    CHECK(sl_segments[8] == 0x7F && sl_segments[1] == 0x06 && sl_segments[0] == 0x3F);
+}
+
 int main(void)
 {
     test_intersect();
@@ -257,6 +346,11 @@ int main(void)
     test_gm_time();
     test_paths();
     test_textbuf();
+    test_sin();
+    test_rand();
+    test_life();
+    test_maze();
+    test_segments();
     printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

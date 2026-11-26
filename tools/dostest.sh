@@ -23,6 +23,9 @@ cp build/PETITE.EXE "$work/PETITE/"
 cp build/PETITE.EXE "$work/GUI/"
 printf 'scanpath:C:\\GAMES\\MEMTEST\n' > "$work/GUI/PETITE.CFG"
 printf 'one\r\ntwo\r\n' > "$work/OUT/EDIT.TXT"
+mkdir -p "$work/SET"
+cp build/PETITE.EXE "$work/SET/"
+printf '; my settings\nscanpath:C:\\GAMES\nSaver: clock\n; the end\n' > "$work/SET/PETITE.CFG"
 cp -R tests/dos/GAMES "$work/GAMES"
 (cd "$work" && WATCOM=$WATCOM INCLUDE=$WATCOM/h PATH=$OWBIN:$PATH \
     "$OWBIN/wcl" -q -bt=dos -ms -0 -fe=GAMES/MEMTEST/FREEMEM.EXE "$OLDPWD/tests/dos/freemem.c" >/dev/null)
@@ -55,6 +58,27 @@ PETITE /RUN=noname > C:\\OUT\\RUN4.TXT
 cd \\GUI
 PETITE /CGA /SHOT=4 /DUMP=C:\\OUT\\BACK.BIN > C:\\OUT\\GUI.TXT
 PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
+PETITE /CGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\CCYCLE.BIN
+PETITE /EGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\ECYCLE.BIN
+PETITE /CGA /SAVER=blank /STEPS=60 /DUMP=C:\\OUT\\CBLANK.BIN
+PETITE /EGA /SAVER=blank /STEPS=60 /DUMP=C:\\OUT\\EBLANK.BIN
+PETITE /CGA /SAVER=stars /STEPS=60 /DUMP=C:\\OUT\\CSTARS.BIN
+PETITE /EGA /SAVER=stars /STEPS=60 /DUMP=C:\\OUT\\ESTARS.BIN
+PETITE /CGA /SAVER=lines /STEPS=60 /DUMP=C:\\OUT\\CLINES.BIN
+PETITE /EGA /SAVER=lines /STEPS=60 /DUMP=C:\\OUT\\ELINES.BIN
+PETITE /CGA /SAVER=maze /STEPS=60 /DUMP=C:\\OUT\\CMAZE.BIN
+PETITE /EGA /SAVER=maze /STEPS=60 /DUMP=C:\\OUT\\EMAZE.BIN
+PETITE /CGA /SAVER=melt /STEPS=60 /DUMP=C:\\OUT\\CMELT.BIN
+PETITE /EGA /SAVER=melt /STEPS=60 /DUMP=C:\\OUT\\EMELT.BIN
+PETITE /CGA /SAVER=life /STEPS=60 /DUMP=C:\\OUT\\CLIFE.BIN
+PETITE /EGA /SAVER=life /STEPS=60 /DUMP=C:\\OUT\\ELIFE.BIN
+PETITE /CGA /SAVER=games /STEPS=60 /DUMP=C:\\OUT\\CGAMES.BIN
+PETITE /EGA /SAVER=games /STEPS=60 /DUMP=C:\\OUT\\EGAMES.BIN
+PETITE /CGA /SAVER=clock /STEPS=60 /DUMP=C:\\OUT\\CCLOCK.BIN
+PETITE /EGA /SAVER=clock /STEPS=60 /DUMP=C:\\OUT\\ECLOCK.BIN
+cd \\SET
+PETITE /SET=saver:maze
+PETITE /SET=saverdelay:15
 dir /a C:\\PETITE > C:\\OUT\\DIR.TXT
 exit
 EOF
@@ -119,6 +143,17 @@ if os.path.exists(os.path.join(w, "OUT", "BACK.BIN")):
 edited = open(os.path.join(w, "OUT", "EDIT.TXT"), "rb").read()
 check(edited == b"Hi\r\none\r\ntwo\r\n!", "the editor saved a typed line and kept CR LF: %r" % edited)
 check(not os.path.exists(os.path.join(w, "OUT", "PETITE.$$$")), "no temporary file left from saving")
+for k in ["cycle", "blank", "stars", "lines", "maze", "melt", "life", "games", "clock"]:
+    for look, size in (("C", 16384), ("E", 64000)):
+        p = os.path.join(w, "OUT", look + k.upper()[:7] + ".BIN")
+        data = open(p, "rb").read() if os.path.exists(p) else b""
+        drawn = len(set(data)) > 1
+        ok = len(data) == size and (not drawn if k == "blank" else drawn)
+        check(ok, "the %s saver ran in %s and %s" % (k, "Paper" if look == "C" else "Ink",
+                                                    "left the screen black" if k == "blank" else "drew"))
+cfg = read("SET", "PETITE.CFG").replace("\r", "")
+check(cfg == "; my settings\nscanpath:C:\\GAMES\nsaver:maze\n; the end\nsaverdelay:15\n",
+      "/SET changed one setting and added another, keeping the rest: %r" % cfg)
 print("%d failed" % len(fails))
 sys.exit(1 if fails else 0)
 EOF

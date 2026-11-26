@@ -6,6 +6,7 @@
 const uint8_t PAT_CHECKER[2] = { 0xAA, 0x55 };
 const uint8_t PAT_DOTS[2] = { 0xAA, 0xAA };
 
+int gfx_has_ega;
 static const Driver *D;
 static Rect clip;
 static const Rect SCREEN = { 0, 0, SCREEN_W, SCREEN_H };
@@ -88,6 +89,74 @@ void gfx_bits(int x, int y, uint16_t bits, int n, uint8_t c)
         bits &= (uint16_t)(0xFFFFu << (16 - n));
     if (bits)
         D->span(x, y, bits, n, c);
+}
+
+void gfx_xor_bits(int x, int y, uint16_t bits, int n, uint8_t c)
+{
+    int cut;
+
+    if (y < 0 || y >= SCREEN_H || n <= 0)
+        return;
+    cut = -x;
+    if (cut > 0) {
+        if (cut >= n)
+            return;
+        bits <<= cut;
+        x = 0;
+        n -= cut;
+    }
+    cut = x + n - SCREEN_W;
+    if (cut > 0)
+        n -= cut;
+    if (n <= 0)
+        return;
+    if (n < 16)
+        bits &= (uint16_t)(0xFFFFu << (16 - n));
+    if (bits)
+        D->xor_span(x, y, bits, n, c);
+}
+
+void gfx_put_row(int x, int y, int n, const uint8_t *pix)
+{
+    D->put_row(x, y, n, pix);
+}
+
+void gfx_move_down(int x, int y, int w, int h, int dy)
+{
+    if (h > 0 && dy > 0)
+        D->move_down(x, y, w, h, dy);
+}
+
+uint8_t gfx_peek(int x, int y)
+{
+    return D->peek(x, y);
+}
+
+void gfx_blank(int off)
+{
+    D->blank(off);
+}
+
+void gfx_palette(const uint8_t *map)
+{
+    D->palette(map);
+}
+
+void gfx_palette_reset(void)
+{
+    uint8_t map[16];
+    int i;
+
+    for (i = 0; i < 16; i++)
+        map[i] = (uint8_t)i;
+    if (D == &drv_cga)
+        map[1] = 15; /* Paper's ink is white */
+    D->palette(map);
+}
+
+const uint8_t __far *gfx_glyph(unsigned char ch)
+{
+    return font + (ch > 127 ? '?' : ch) * 8;
 }
 
 void gfx_mask(int x, int y, const uint16_t *rows, int h, int n, uint8_t c)

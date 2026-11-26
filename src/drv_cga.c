@@ -149,8 +149,85 @@ static int cga_dump(FILE *f)
     return 1;
 }
 
+static void cga_put_row(int x, int y, int n, const uint8_t *pix)
+{
+    uint8_t __far *p = ROW(y) + (x >> 3);
+    int i, b;
+    uint8_t v;
+
+    for (i = 0; i < n; i += 8) {
+        v = 0;
+        for (b = 0; b < 8; b++)
+            if (pix[i + b])
+                v |= (uint8_t)(0x80 >> b);
+        *p++ = v;
+    }
+}
+
+static void cga_move_down(int x, int y, int w, int h, int dy)
+{
+    int r, nb = w >> 3;
+
+    for (r = h - 1; r >= 0; r--) /* from the bottom, so nothing is overwritten before it moves */
+        _fmemcpy(ROW(y + r + dy) + (x >> 3), ROW(y + r) + (x >> 3), nb);
+}
+
+static void cga_xor_span(int x, int y, uint16_t bits, int n, uint8_t c)
+{
+    uint8_t __far *p = ROW(y) + (x >> 3);
+    int s = x & 7;
+
+    (void)n;
+    if (!c)
+        return;
+    p[0] ^= (uint8_t)(bits >> (8 + s));
+    p[1] ^= (uint8_t)(bits >> s);
+    p[2] ^= (uint8_t)(bits << (8 - s));
+}
+
+static uint8_t cga_peek(int x, int y)
+{
+    return (uint8_t)((ROW(y)[x >> 3] >> (7 - (x & 7))) & 1);
+}
+
+/* On an EGA or VGA, mode 06h goes through the attribute controller like any other mode, so
+ * blanking and the ink colour use it; on a CGA, the mode and colour select registers. */
+static void attribute_blank(int off)
+{
+    (void)inp(0x3DA);              /* the attribute controller's next write is an index */
+    outp(0x3C0, off ? 0x00 : 0x20); /* bit 5 clear: the palette is cut off, so is the picture */
+}
+
+static uint8_t ega_value(uint8_t c)
+{
+    return (uint8_t)((c & 7) | ((c & 8) << 1)); /* 200-line modes: bits 0-2 RGB, 4 intensity */
+}
+
+static void cga_blank(int off)
+{
+    if (gfx_has_ega)
+        attribute_blank(off);
+    else
+        outp(0x3D8, off ? 0x16 : 0x1E); /* mode 06h with video enable (bit 3) off or on */
+}
+
+static void cga_palette(const uint8_t *map)
+{
+    union REGS r;
+
+    if (gfx_has_ega) {
+        r.x.ax = 0x1000; /* set one palette register */
+        r.h.bl = 1;
+        r.h.bh = ega_value(map[1]);
+        int86(0x10, &r, &r);
+    } else {
+        outp(0x3D9, map[1] & 0x0F); /* colour select: the ink in 640 x 200 */
+    }
+}
+
 const Driver drv_cga = {
     "Paper (CGA)",
     cga_init, cga_fill, cga_pattern, cga_span, cga_xor_fill,
-    cga_save_size, cga_save, cga_restore, cga_dump
+    cga_save_size, cga_save, cga_restore, cga_dump,
+    cga_put_row, cga_move_down, cga_xor_span, cga_peek, cga_blank, cga_palette
 };

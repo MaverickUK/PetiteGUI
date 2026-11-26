@@ -11,7 +11,7 @@ The basics first: desktop, menu bar and menus, windows, icons, alerts, the point
 ## Rules
 
 - **C89 for `wcc`:** declarations at the top of a block. `int` is 16 bits: use `long` past 32,767, and cast before multiplying sizes (`(long)a * b`).
-- **Small model:** 64 KB code, 64 KB data. Video memory and saved rectangles are `__far`; never keep a near pointer to them.
+- **Medium model** (since 0.4.0): code in as many 64 KB segments as it needs, all data in one (DGROUP, 64 KB with the stack). Calls are far, data pointers near. Video memory and DOS blocks are `__far`; never keep a near pointer to them. `swapcore.asm`'s entry points are far (`retf`).
 - **Drivers own the hardware.** Only `drv_*.c` touch video memory or video ports; `draw.c` calls only `gfx_*`. A driver function gets coordinates already clipped to the screen, and an EGA one leaves the graphics controller at the BIOS defaults (the mouse driver relies on them).
 - **Hide the mouse** (`mouse_hide`/`mouse_show`, which nest) around anything that draws, reads or saves video memory.
 - **Window edges on 8-pixel columns** (`SNAP8`), so drawing is whole bytes.

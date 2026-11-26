@@ -23,12 +23,17 @@ typedef struct Settings {
     int play_stats;      /* log plays to !GM_LOG.TXT, as GameMinder does */
     char exe_dir[80];    /* where PETITE.EXE, PETITE.CFG and PETITE.IDX are */
     char temp_dir[80];   /* %TEMP%, else exe_dir: the swap file and launch batch file */
+    int saver;           /* a saver's index, SAVER_OFF or SAVER_RANDOM (saver.h) */
+    int saver_delay;     /* minutes without input before it starts */
 } Settings;
 
 extern Settings S;
 
 /* Read PETITE.CFG. argv0 locates it. */
 void settings_load(const char *argv0);
+/* Set one key in PETITE.CFG, keeping its other lines (and comments) as they are. Zero if it
+ * can't be written. */
+int settings_set(const char *key, const char *value);
 
 int games_loaded(void);
 int games_count(void);
