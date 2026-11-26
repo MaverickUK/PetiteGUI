@@ -1,0 +1,6 @@
+name:Batch Game
+exec:GO.BAT batch
+before:ECHO before>C:\OUT\BEFORE.TXT
+after:ECHO after>C:\OUT\AFTER.TXT
+year:1993
+genre:Test

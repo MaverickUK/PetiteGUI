@@ -9,11 +9,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-blue" alt="Licence: GPL-3.0"></a>
 </p>
 
-A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the mouse, in 33 KB, for any 8088 or later.
+A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the mouse, for any 8088 or later. It lists your games from [GameMinder](https://github.com/MaverickUK/GameMinder)'s metadata and runs them with itself swapped out of memory.
 
-<img src="docs/img/paper1.png" alt="Paper: the File menu open over two windows, in black and white" width="400"> <img src="docs/img/ink2.png" alt="Ink: the Delete alert, in 16 colours" width="400">
+<img src="docs/img/paper1.png" alt="Paper: the File menu open over two windows, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
-**Status:** 0.1.0, the basics. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
+**Status:** 0.2.0, the basics and GameMinder's games. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
 ## Two looks, one desktop
 
@@ -31,8 +31,28 @@ Both share the layout, the widgets and the 8×8 BIOS font; only the colour table
 - **Desktop icons:** double-click A: or C: to open its window.
 - **Alerts** with a default button: File › Delete… asks first (it only removes the line: nothing on disk is touched).
 - **The pointer**, drawn by the DOS mouse driver, as a squat arrow to suit the tall pixels.
+- **Your games**, from GameMinder's metadata: see below.
 
-The files listed are samples, not your disks.
+The A: and C: windows list sample files, not your disks.
+
+## Games, with GameMinder
+
+PetiteGUI reads the `!GM_INFO.TXT` file [GameMinder](https://github.com/MaverickUK/GameMinder) keeps in each game's directory, and runs games the way GameMinder does.
+
+- **The Games window** (the joystick icon, or Games › Show games, Ctrl+G) lists every game found under `ScanPath`, by name, with its year. The first time it opens it scans for `!GM_INFO.TXT` files and saves what it found in `PETITE.IDX`, so later opens are instant. **Games › Rescan** looks again.
+- **Run a game** with a double-click, Enter or Games › Run (Games › Run setup for its `setup:` program). It uses the game's `exec:`, `before:` and `after:`; batch files go through `COMMAND.COM`.
+- **Nearly all your memory for the game:** while a game runs, PetiteGUI swaps itself out to EMS, or to a `SWAP.$$$` file if there's no EMS, leaving about 2 KB behind. In testing, a game got 581 KB with PetiteGUI swapped out, against 584 KB run straight from DOS. A game whose `memory:` won't fit gets a warning first.
+- **Play stats shared with GameMinder:** each play is logged to the game's `!GM_LOG.TXT` in GameMinder's format, so GameMinder's counts and times include it.
+
+Settings go in `PETITE.CFG`, next to `PETITE.EXE`, as `key:value` lines like GameMinder's:
+
+```
+scanpath:C:\GAMES;D:\GAMES
+useems:true
+playstats:true
+```
+
+`scanpath` defaults to the whole of `C:\`. Swap and launch files go in `%TEMP%`, or next to `PETITE.EXE`.
 
 ## Quick start
 
@@ -41,7 +61,9 @@ The files listed are samples, not your disks.
 3. `tools/run.sh` runs it on an emulated CGA, at roughly an IBM PC/XT's speed; `tools/run.sh ink` on an EGA.
 4. On a real PC: copy `PETITE.EXE` over, load a mouse driver (`MOUSE.COM` or `CTMOUSE`), run `PETITE` (`/CGA` or `/EGA` to choose the look).
 
-Keys: Ctrl+O open, Ctrl+I info, Del delete, Ctrl+W close, ↑ ↓ select, Esc closes a menu or alert, Ctrl+Q quits.
+Keys: Ctrl+G games, Enter runs the selected game, Ctrl+O open, Ctrl+I info, Del delete, Ctrl+W close, ↑ ↓ select, Esc closes a menu or alert, Ctrl+Q quits.
+
+Command line: `PETITE /SCAN` scans for games at once, `/LIST` prints them, `/RUN=name` runs the first whose name contains *name*, and `/MEM` shows what a swap leaves for a game.
 
 ## Documents
 
@@ -55,3 +77,8 @@ Keys: Ctrl+O open, Ctrl+I info, Del delete, Ctrl+W close, ↑ ↓ select, Esc cl
 ## Licence
 
 [GPL-3.0](LICENSE).
+
+## Credits
+
+- **ExecWithSwap**, Copyright (c) 1988 TurboPower Software, "may be used freely as long as due credit is given": `src/swapcore.asm` is GameMinder's NASM port of it, changed for C.
+- **[GameMinder](https://github.com/MaverickUK/GameMinder)** for the `!GM_INFO.TXT` and `!GM_LOG.TXT` formats and its rules for running games.

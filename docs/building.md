@@ -6,6 +6,7 @@ Back to the [README](../README.md).
 
 - **Open Watcom v2**, the C compiler and linker for 16-bit DOS. Download `ow-snapshot.tar.xz` from a [dated release](https://github.com/open-watcom/open-watcom-v2/releases) and unpack it to `~/opt/openwatcom` (or set `WATCOM`). It carries native binaries for Apple Silicon (`armo64`), Intel Macs (`bino64`) and Linux (`binl64`); the Makefile picks one.
 - **DOSBox-X** (`brew install dosbox-x`) for running it, and for the screenshots.
+- **NASM** (`brew install nasm`) for the swap core.
 - **A host C compiler** for the unit tests.
 
 ## Commands
@@ -13,19 +14,31 @@ Back to the [README](../README.md).
 ```sh
 make                # build/PETITE.EXE
 make test           # host unit tests (rectangles, number formatting), with ASan/UBSan
-make shots          # build/shots/{paper,ink}{0,1,2}.png, through DOSBox-X with no window
+make shots          # build/shots/{paper,ink}{0,1,2,3}.png, through DOSBox-X with no window
+make dostest        # end-to-end tests in DOSBox-X: scanning, swapping, running games
 tools/run.sh        # try it: Paper on an emulated CGA at about PC/XT speed
 tools/run.sh ink    # Ink on an emulated EGA
 CYCLES=max tools/run.sh   # flat out
 ```
 
+## End-to-end tests
+
+`tools/dostest.sh` (`make dostest`) runs PetiteGUI in DOSBox-X with no window, on the fixture games in `tests/dos/GAMES` and a stand-in game (`tests/dos/freemem.c`) that records how much memory DOS gave it and its arguments. It checks:
+- the scan finds every game, including nested and nameless ones, and writes `PETITE.IDX`;
+- a game run from PetiteGUI, swapped to EMS and then to a file, gets within 4 KB of the memory it gets run straight from DOS, with its arguments;
+- a batch game runs with its `before:` and `after:`;
+- `!GM_LOG.TXT` gets GameMinder's lines;
+- a missing program is reported, and no swap or batch file is left behind.
+
+`KEEP=1 tools/dostest.sh` keeps the DOS drive it made, to look at.
+
 ## Screenshots
 
-`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
+`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
 
 ## CI
 
-`.github/workflows/build.yml` runs on every push to `main` and every pull request: it checks the version and changelog (below), downloads Open Watcom on Ubuntu, runs the host tests, builds `PETITE.EXE` and keeps it as an artifact.
+`.github/workflows/build.yml` runs on every push to `main` and every pull request: it checks the version and changelog (below), downloads Open Watcom on Ubuntu, runs the host tests, builds `PETITE.EXE` and keeps it as an artifact. A second job runs the end-to-end tests in DOSBox-X.
 
 ## Versions and the changelog
 

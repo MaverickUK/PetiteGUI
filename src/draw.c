@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "app.h"
+#include "games.h"
 #include "gfx.h"
 #include "util.h"
 
@@ -14,6 +15,9 @@ static const char *const FOLDER[] = {
 static const char *const FILE_ICON[] = {
     "xxxxx...", "xooxox..", "xooxxxx.", "xooooox.", "xooooox.", "xooooox.", "xxxxxxx."
 };
+static const char *const GAME_ICON[] = {
+    "....xx..", "....xx..", "...xoox.", "....xx..", ".xxxxxxx", "xooxooox", "xxxxxxxx"
+};
 static const char *const CHECK[] = {
     ".......x", "......x.", "x....x..", ".x..x...", "..xx....", "........", "........"
 };
@@ -21,6 +25,7 @@ static const char *const CHECK[] = {
 
 static uint16_t folder_line[ICON_ROWS], folder_fill[ICON_ROWS];
 static uint16_t file_line[ICON_ROWS], file_fill[ICON_ROWS];
+static uint16_t game_line[ICON_ROWS], game_fill[ICON_ROWS];
 static uint16_t check_mask[ICON_ROWS], check_unused[ICON_ROWS];
 
 /* Turn picture rows into bit masks, each source pixel 2 wide. */
@@ -45,6 +50,7 @@ void draw_init(void)
 {
     make_masks(FOLDER, folder_line, folder_fill);
     make_masks(FILE_ICON, file_line, file_fill);
+    make_masks(GAME_ICON, game_line, game_fill);
     make_masks(CHECK, check_mask, check_unused);
 }
 
@@ -294,6 +300,18 @@ void draw_icon(int i)
         gfx_fill(x + w - 9, bt + pct(bh, 74), 4, imax(1, pct(bh, 14)), T->icon_led);
         hline(x + 4, bt + pct(bh, 30), pct(w, 50), T->icon_detail);
         break;
+    case ICON_GAMES: /* a joystick */
+        bx = x + pct(w, 12);
+        bw = pct(w, 76);
+        bt = y + pct(h, 60);
+        bh = y + h - bt;
+        gfx_fill(bx, bt, bw, bh, T->icon_fill);
+        gfx_frame(bx, bt, bw, bh, T->icon_line);
+        gfx_fill(bx + 4, bt + 2, 6, imax(1, bh - 4), T->icon_led);
+        gfx_fill(x + w / 2 - 1, y + pct(h, 25), 3, bt - y - pct(h, 25), T->icon_line);
+        gfx_fill(x + w / 2 - 6, y, 13, pct(h, 30), T->icon_detail);
+        gfx_frame(x + w / 2 - 6, y, 13, pct(h, 30), T->icon_line);
+        break;
     default:
         gfx_fill(x + pct(w, 15), y + pct(h, 12), pct(w, 70), imax(1, pct(h, 8)), T->icon_line);
         gfx_frame(x + pct(w, 40), y, pct(w, 20), pct(h, 14), T->icon_line);
@@ -380,14 +398,37 @@ static void draw_scrollbar(const Win *w, const WinParts *p, int active)
     gfx_frame(p->scroll.x, ty - 1, SCROLL_W, th + 2, T->frame);
 }
 
+enum { ROW_FILE, ROW_DIR, ROW_GAME };
+
+/* A row's name, right-hand column (size or year) and icon. */
+static void row_text(const Win *w, int k, char *name, char *right, int *kind)
+{
+    if (w->kind == WIN_GAMES) {
+        Game g;
+
+        games_get(k, &g);
+        strcpy(name, g.name);
+        strcpy(right, g.year);
+        *kind = ROW_GAME;
+        return;
+    }
+    strcpy(name, w->rows[k].name);
+    right[0] = '\0';
+    if (!w->rows[k].dir)
+        fmt_thousands(w->rows[k].size, right);
+    *kind = w->rows[k].dir ? ROW_DIR : ROW_FILE;
+}
+
 void draw_window(int i)
 {
     const Win *w = &A.win[i];
     WinParts p;
     int active = i == front_window(), x = w->r.x, y = w->r.y;
-    int r, k, tx, tw, ry, nx, size_x, name_w = 0, size_w = 0, show_sizes;
+    int r, k, tx, tw, ry, nx, name_w = 0;
+    int right_w = 0, right_x, show_right, max_chars;
     uint8_t tc, c;
-    char buf[24];
+    char buf[24], right[24], name[40];
+    const char *info_right;
     Rect old_clip, list;
 
     window_parts(i, &p);
@@ -421,48 +462,64 @@ void draw_window(int i)
     }
 
     /* Info line */
-    sprintf(buf, "%d item%s", w->nrows, w->nrows == 1 ? "" : "s");
+    if (w->kind == WIN_GAMES) {
+        sprintf(buf, "%d game%s", w->nrows, w->nrows == 1 ? "" : "s");
+        info_right = S.scan_path;
+    } else {
+        sprintf(buf, "%d item%s", w->nrows, w->nrows == 1 ? "" : "s");
+        fmt_thousands(w->free_kb, right);
+        strcat(right, " KB free");
+        info_right = right;
+    }
     gfx_text(p.info.x + 8, p.info.y + 1, buf, T->text, 0);
-    fmt_thousands(w->free_kb, buf);
-    strcat(buf, " KB free");
-    if (gfx_text_w(buf) + 16 + 9 * 8 < p.info.w)
-        gfx_text(p.info.x + p.info.w - 8 - gfx_text_w(buf), p.info.y + 1, buf, T->text, 0);
+    if (gfx_text_w(info_right) + 16 + 9 * 8 < p.info.w)
+        gfx_text(p.info.x + p.info.w - 8 - gfx_text_w(info_right), p.info.y + 1, info_right, T->text, 0);
     hline(p.info.x, p.info.y + ROW_H + 1, p.info.w, T->frame);
 
     draw_scrollbar(w, &p, active);
 
-    /* Rows, clipped to the list */
-    for (k = 0; k < w->nrows; k++) {
-        name_w = imax(name_w, gfx_text_w(w->rows[k].name));
-        fmt_thousands(w->rows[k].size, buf);
-        if (!w->rows[k].dir)
-            size_w = imax(size_w, gfx_text_w(buf));
+    /* Rows, clipped to the list. The right column (sizes, years) shows if it fits beside
+     * the widest name; names too long for the space are cut short. */
+    if (w->kind == WIN_GAMES) {
+        name_w = 20 * 8;
+        right_w = 4 * 8;
+    } else {
+        for (k = 0; k < w->nrows; k++) {
+            name_w = imax(name_w, gfx_text_w(w->rows[k].name));
+            fmt_thousands(w->rows[k].size, buf);
+            if (!w->rows[k].dir)
+                right_w = imax(right_w, gfx_text_w(buf));
+        }
     }
     nx = p.list.x + 8 + 16 + 8;
-    size_x = p.list.x + p.list.w - 8;
-    show_sizes = nx + name_w + 16 + size_w <= size_x;
+    right_x = p.list.x + p.list.w - 8;
+    show_right = nx + name_w + 16 + right_w <= right_x;
+    max_chars = ((show_right ? right_x - right_w - 16 : right_x) - nx) / 8;
 
     old_clip = gfx_get_clip();
     rect_intersect(&list, &p.list, &old_clip);
     if (!rect_empty(&list)) {
         gfx_set_clip(&list);
         for (k = w->top; k < w->nrows && k - w->top <= p.visible; k++) {
-            const Row *row = &w->rows[k];
-            int sel = k == w->sel;
+            int sel = k == w->sel, kind;
+            const uint16_t *line_mask, *fill_mask;
 
+            row_text(w, k, name, right, &kind);
+            if ((int)strlen(name) > max_chars && max_chars > 0)
+                name[max_chars] = '\0';
             ry = p.list.y + 2 + (k - w->top) * ROW_H;
             if (sel)
                 gfx_fill(p.list.x, ry - 1, p.list.w, ROW_H, T->sel);
             c = sel ? T->sel_text : T->text;
-            gfx_mask(p.list.x + 8, ry, row->dir ? folder_fill : file_fill, ICON_ROWS, 16,
-                     sel ? T->sel : (row->dir ? T->folder_fill : T->file_fill));
-            gfx_mask(p.list.x + 8, ry, row->dir ? folder_line : file_line, ICON_ROWS, 16,
-                     sel ? T->sel_text : (row->dir ? T->folder_line : T->file_line));
-            gfx_text(nx, ry, row->name, c, 0);
-            if (show_sizes && !row->dir) {
-                fmt_thousands(row->size, buf);
-                gfx_text(size_x - gfx_text_w(buf), ry, buf, c, 0);
-            }
+            line_mask = kind == ROW_DIR ? folder_line : kind == ROW_GAME ? game_line : file_line;
+            fill_mask = kind == ROW_DIR ? folder_fill : kind == ROW_GAME ? game_fill : file_fill;
+            gfx_mask(p.list.x + 8, ry, fill_mask, ICON_ROWS, 16,
+                     sel ? T->sel : (kind == ROW_DIR ? T->folder_fill : T->file_fill));
+            gfx_mask(p.list.x + 8, ry, line_mask, ICON_ROWS, 16,
+                     sel ? T->sel_text : (kind == ROW_DIR ? T->folder_line : T->file_line));
+            gfx_text(nx, ry, name, c, 0);
+            if (show_right && right[0])
+                gfx_text(right_x - gfx_text_w(right), ry, right, c, 0);
         }
         gfx_set_clip(&old_clip);
     }

@@ -16,9 +16,10 @@
 #define SHADOW_Y 1
 
 #define MAX_ROWS 16
-#define NUM_WINS 2
-#define NUM_ICONS 3
-#define NUM_MENUS 4
+#define NUM_WINS 3
+#define NUM_ICONS 4
+#define NUM_MENUS 5
+#define GAMES_WIN 2 /* the games list's window */
 
 typedef struct Row {
     char name[13];
@@ -26,7 +27,10 @@ typedef struct Row {
     uint8_t dir;
 } Row;
 
+enum { WIN_FILES, WIN_GAMES };
+
 typedef struct Win {
+    int kind;
     Rect r;
     const char *title;
     Row rows[MAX_ROWS];
@@ -41,7 +45,7 @@ typedef struct WinParts {
     int visible; /* list rows that fit */
 } WinParts;
 
-enum { ICON_FLOPPY, ICON_DISK, ICON_TRASH };
+enum { ICON_FLOPPY, ICON_DISK, ICON_GAMES, ICON_TRASH };
 
 typedef struct Icon {
     const char *label;

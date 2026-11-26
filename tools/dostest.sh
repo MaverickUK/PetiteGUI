@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# End-to-end tests in DOSBox-X (no window), for what the host tests can't reach: scanning for
+# GameMinder's !GM_INFO.TXT, the index, running games swapped out (to EMS, then to a file),
+# batch files with before:/after:, and GameMinder's play log.
+#
+# A stand-in game (tests/dos/freemem.c) records how much memory it was given. Run directly
+# from DOS first, then from PetiteGUI: with PetiteGUI swapped out it should get nearly as much.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+make -s build/PETITE.EXE
+
+WATCOM=${WATCOM:-$HOME/opt/openwatcom}
+case "$(uname -s)/$(uname -m)" in
+    Darwin/arm64) OWBIN=$WATCOM/armo64 ;;
+    Darwin/*) OWBIN=$WATCOM/bino64 ;;
+    *) OWBIN=$WATCOM/binl64 ;;
+esac
+
+work=$(mktemp -d)
+[ -n "${KEEP:-}" ] && echo "work: $work" || trap 'rm -rf "$work"' EXIT
+mkdir -p "$work/PETITE" "$work/GUI" "$work/OUT"
+cp build/PETITE.EXE "$work/PETITE/"
+cp build/PETITE.EXE "$work/GUI/"
+printf 'scanpath:C:\\GAMES\\MEMTEST\n' > "$work/GUI/PETITE.CFG"
+cp -R tests/dos/GAMES "$work/GAMES"
+(cd "$work" && WATCOM=$WATCOM INCLUDE=$WATCOM/h PATH=$OWBIN:$PATH \
+    "$OWBIN/wcl" -q -bt=dos -ms -0 -fe=GAMES/MEMTEST/FREEMEM.EXE "$OLDPWD/tests/dos/freemem.c" >/dev/null)
+rm -f "$work"/*.o "$work"/*.obj
+printf 'scanpath:C:\\GAMES\n' > "$work/PETITE/PETITE.CFG"
+
+cat > "$work/test.conf" <<EOF
+[sdl]
+output=surface
+[dosbox]
+machine=svga_s3
+quit warning=false
+[cpu]
+cycles=max
+[dos]
+ems=true
+[autoexec]
+mount c "$work"
+c:
+cd \\PETITE
+C:\\GAMES\\MEMTEST\\FREEMEM.EXE C:\\OUT\\BASE.TXT direct
+PETITE /MEM > C:\\OUT\\MEM.TXT
+PETITE /LIST > C:\\OUT\\LIST.TXT
+PETITE /RUN=memory > C:\\OUT\\RUN1.TXT
+PETITE /RUN=batch > C:\\OUT\\RUN2.TXT
+echo scanpath:C:\\GAMES> PETITE.CFG
+echo useems:false>> PETITE.CFG
+PETITE /RUN=memory > C:\\OUT\\RUN3.TXT
+PETITE /RUN=noname > C:\\OUT\\RUN4.TXT
+cd \\GUI
+PETITE /CGA /SHOT=4 /DUMP=C:\\OUT\\BACK.BIN > C:\\OUT\\GUI.TXT
+dir /a C:\\PETITE > C:\\OUT\\DIR.TXT
+exit
+EOF
+dosbox-x -silent -nogui -nomenu -conf "$work/test.conf" > "$work/log.txt" 2>&1 &
+pid=$!
+for _ in $(seq 1 120); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+done
+kill "$pid" 2>/dev/null || true
+
+python3 - "$work" <<'EOF'
+import os, re, sys
+w = sys.argv[1]
+fails = []
+
+def read(*p):
+    path = os.path.join(w, *p)
+    return open(path, encoding="latin-1").read() if os.path.exists(path) else ""
+
+def check(cond, what):
+    print(("ok   " if cond else "FAIL ") + what)
+    if not cond:
+        fails.append(what)
+
+base = re.findall(r"free=(\d+)", read("OUT", "BASE.TXT"))
+run = re.findall(r"free=(\d+)(.*)", read("OUT", "RUN.TXT"))
+batch = read("OUT", "BATCH.TXT")
+listing = read("OUT", "LIST.TXT")
+mem = read("OUT", "MEM.TXT")
+log = read("GAMES", "MEMTEST", "!GM_LOG.TXT")
+index = read("PETITE", "PETITE.IDX")
+print(mem.strip())
+print(listing.strip())
+
+check(len(base) == 1, "the stand-in game ran directly: %s KB free" % (base[0] if base else "?"))
+check("4 games in C:\\GAMES" in listing, "the scan found all 4 games, nested and nameless ones too")
+check("NONAME" in listing and "Deep Down" in listing, "a game with no name: is listed by its directory")
+check(index.count("\npath:") == 4 and "scanpath:C:\\GAMES" in index, "PETITE.IDX holds the 4 games")
+check(len(run) == 3, "the game ran three times from PetiteGUI (EMS, the swap file, the Games window)")
+if base and len(run) >= 2:
+    b = int(base[0])
+    for (free, args), how in zip(run, ("EMS", "swap file", "EMS, from the Games window")):
+        lost = b - int(free)
+        check(lost <= 4, "swapped to %s: the game got %s KB, %d KB less than run directly" % (how, free, lost))
+        check(args.strip() == "hello world", "its arguments arrived: %r" % args.strip())
+check("before" in read("OUT", "BEFORE.TXT") and "after" in read("OUT", "AFTER.TXT"),
+      "before: and after: ran around the batch game")
+check("batch" in batch, "the batch game ran, with its argument")
+check(log.count(">") == 3 and log.count("<") == 3, "!GM_LOG.TXT has three plays in GameMinder's format")
+check(bool(re.match(r">\d{4}/\d\d/\d\d \d\d:\d\d\n<\d+\n", log)), "the log lines look like GameMinder's")
+check("wasn't found" in read("OUT", "RUN4.TXT") or "No game" in read("OUT", "RUN4.TXT"),
+      "a game whose program is missing is reported, not run")
+check("SWAP" not in read("OUT", "DIR.TXT") and "PETITE.BAT" not in read("OUT", "DIR.TXT").upper(),
+      "no swap file or launch batch file left behind")
+check(os.path.getsize(os.path.join(w, "OUT", "BACK.BIN")) == 16384 if os.path.exists(os.path.join(w, "OUT", "BACK.BIN")) else False,
+      "back on the desktop afterwards (the screen was dumped)")
+if os.path.exists(os.path.join(w, "OUT", "BACK.BIN")):
+    os.makedirs("build/shots", exist_ok=True)
+    os.system("python3 tools/dump2png.py '%s' build/shots/back.png" % os.path.join(w, "OUT", "BACK.BIN"))
+    print("     the desktop after the game: build/shots/back.png")
+print("%d failed" % len(fails))
+sys.exit(1 if fails else 0)
+EOF

@@ -1,8 +1,10 @@
-/* Host tests for the code with no DOS in it: rectangles and number formatting. */
+/* Host tests for the code with no DOS in it: rectangles, number formatting and GameMinder's
+ * metadata and launch rules. */
 #include <stdio.h>
 #include <string.h>
 #include "../src/rect.h"
 #include "../src/util.h"
+#include "../src/gminfo.h"
 
 static int failures, checks;
 
@@ -77,12 +79,108 @@ static void test_snap(void)
     CHECK(SNAP8_UP(168) == 168);
 }
 
+static void test_gm_split_apply(void)
+{
+    char key[16], value[128];
+    GameInfo g;
+
+    CHECK(gm_split("name:Commander Keen 1", key, sizeof key, value, sizeof value));
+    CHECK(strcmp(key, "NAME") == 0 && strcmp(value, "Commander Keen 1") == 0);
+    CHECK(gm_split("  Exec : C:\\GAMES\\KEEN\\KEEN1.EXE /NOJOY\r\n", key, sizeof key, value, sizeof value));
+    CHECK(strcmp(key, "EXEC") == 0 && strcmp(value, "C:\\GAMES\\KEEN\\KEEN1.EXE /NOJOY") == 0);
+    CHECK(!gm_split("; a comment: with a colon", key, sizeof key, value, sizeof value));
+    CHECK(!gm_split("no colon here", key, sizeof key, value, sizeof value));
+    CHECK(!gm_split("   ", key, sizeof key, value, sizeof value));
+
+    memset(&g, 0, sizeof g);
+    gm_apply(&g, "NAME", "A name far too long to fit in the thirty-two characters");
+    CHECK(strlen(g.name) == 32);
+    gm_apply(&g, "MEMORY", "580");
+    CHECK(g.memory_kb == 580);
+    gm_apply(&g, "YEAR", "1991");
+    CHECK(strcmp(g.year, "1991") == 0);
+    gm_apply(&g, "SOUND", "PC Speaker"); /* known to GameMinder, not needed here */
+}
+
+static void test_gm_paths(void)
+{
+    char out[64], dir[64];
+
+    gm_dir_name("C:\\GAMES\\KEEN1\\", out, sizeof out);
+    CHECK(strcmp(out, "KEEN1") == 0);
+    gm_dir_name("D:\\DOOM", out, sizeof out);
+    CHECK(strcmp(out, "DOOM") == 0);
+
+    strcpy(dir, "C:\\GAMES");
+    gm_normalize_dir(dir, sizeof dir);
+    CHECK(strcmp(dir, "C:\\GAMES\\") == 0);
+    gm_normalize_dir(dir, sizeof dir);
+    CHECK(strcmp(dir, "C:\\GAMES\\") == 0);
+
+    CHECK(gm_path_count("C:\\GAMES;D:\\GAMES") == 2);
+    CHECK(gm_path_count(" C:\\GAMES ; ;D:\\X;") == 2);
+    gm_path_item(" C:\\GAMES ; ;D:\\X;", 1, out, sizeof out);
+    CHECK(strcmp(out, "D:\\X") == 0);
+    gm_path_item("C:\\", 0, out, sizeof out);
+    CHECK(strcmp(out, "C:\\") == 0);
+    CHECK(gm_path_count("") == 0);
+}
+
+static void test_gm_command(void)
+{
+    char prog[GM_PATH_MAX], args[GM_PATH_MAX];
+    char lines[GM_SCRIPT_LINES][GM_PATH_MAX + 8];
+    int n;
+
+    gm_command("C:\\GAMES\\DOOM\\", "DOOM.EXE -nomonsters", "", prog, sizeof prog, args, sizeof args);
+    CHECK(strcmp(prog, "C:\\GAMES\\DOOM\\DOOM.EXE") == 0);
+    CHECK(strcmp(args, "-nomonsters") == 0);
+
+    gm_command("C:\\GAMES\\KEEN\\", "start.bat 2", "C:\\DOS\\COMMAND.COM", prog, sizeof prog, args, sizeof args);
+    CHECK(strcmp(prog, "C:\\DOS\\COMMAND.COM") == 0);
+    CHECK(strcmp(args, "/C C:\\GAMES\\KEEN\\start.bat 2") == 0);
+
+    gm_command("C:\\GAMES\\X\\", "D:\\CD\\RUN.EXE", NULL, prog, sizeof prog, args, sizeof args);
+    CHECK(strcmp(prog, "D:\\CD\\RUN.EXE") == 0 && args[0] == '\0');
+
+    gm_command("C:\\G\\", "GO.BAT", NULL, prog, sizeof prog, args, sizeof args);
+    CHECK(strcmp(prog, GM_DEFAULT_COMSPEC) == 0);
+
+    CHECK(gm_is_batch("X.BAT") && gm_is_batch("x.bat") && !gm_is_batch("X.BATX") && !gm_is_batch("BAT"));
+
+    n = gm_script("C:\\G\\", "GO.BAT -x", "C:\\MOUSE\\MOUSE.COM", "C:\\MOUSE\\MOUSE OFF", lines);
+    CHECK(n == 4);
+    CHECK(strcmp(lines[0], "@ECHO OFF") == 0);
+    CHECK(strcmp(lines[1], "C:\\MOUSE\\MOUSE.COM") == 0);
+    CHECK(strcmp(lines[2], "CALL C:\\G\\GO.BAT -x") == 0);
+    CHECK(strcmp(lines[3], "C:\\MOUSE\\MOUSE OFF") == 0);
+    n = gm_script("C:\\G\\", "GAME.EXE", "", "  ", lines);
+    CHECK(n == 2 && strcmp(lines[1], "C:\\G\\GAME.EXE") == 0);
+}
+
+static void test_gm_time(void)
+{
+    long a = gm_day_number(2026, 11, 26), b = gm_day_number(2026, 11, 27);
+
+    CHECK(b - a == 1);
+    CHECK(gm_day_number(2025, 3, 1) - gm_day_number(2025, 2, 28) == 1);
+    CHECK(gm_day_number(2024, 3, 1) - gm_day_number(2024, 2, 28) == 2); /* leap year */
+    CHECK(gm_day_number(2027, 1, 1) - gm_day_number(2026, 12, 31) == 1);
+    CHECK(gm_elapsed_minutes(a, 23 * 60 + 50, b, 10) == 20); /* across midnight */
+    CHECK(gm_elapsed_minutes(a, 600, a, 635) == 35);
+    CHECK(gm_elapsed_minutes(b, 10, a, 10) == 0); /* the clock went back */
+}
+
 int main(void)
 {
     test_intersect();
     test_union_contains();
     test_thousands();
     test_snap();
+    test_gm_split_apply();
+    test_gm_paths();
+    test_gm_command();
+    test_gm_time();
     printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

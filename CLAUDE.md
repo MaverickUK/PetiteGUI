@@ -17,14 +17,18 @@ The basics first: desktop, menu bar and menus, windows, icons, alerts, the point
 - **Window edges on 8-pixel columns** (`SNAP8`), so drawing is whole bytes.
 - **Pixels are 2.4:1 tall** in 640×200: square-looking things are wider than tall in pixels.
 - **Paper and Ink share everything but the driver and the theme.** A new widget takes its colours from `Theme`, never a literal.
-- **Pure code** (`rect.c`, `util.c`) has no DOS headers, so `tests/run_tests.sh` builds it on the host. Keep logic that can be pure there.
+- **The swap core is the first code in memory:** `build/swapcore.obj` stays first in the Makefile's `OBJ`, and the map (`build/PETITE.MAP`) shows `_swap_core` near `0000:0000`. Everything after its `FirstToSave` is swapped out while a game runs.
+- **No C far heap** (`_fmalloc`): its freed blocks stay allocated, under a game. Use `_dos_allocmem`/`_dos_freemem`, and free every block before `swap_run`.
+- **GameMinder compatibility:** `!GM_INFO.TXT`, `!GM_LOG.TXT` and the launch rules match GameMinder's (`~/Code/GameMinder`, QUICKSTART.md, LAUNCH.PAS, RUNNER.PAS). Change them there first.
+- **Pure code** (`rect.c`, `util.c`, `gminfo.c`) has no DOS headers, so `tests/run_tests.sh` builds it on the host. Keep logic that can be pure there.
 
 ## Toolchain
 
 - `make` (Open Watcom in `~/opt/openwatcom`, or `WATCOM=`); the Makefile calls the tools by full path because macOS's make 3.81 ignores an exported `PATH`.
 - `make test`: host unit tests.
 - `make shots`: every scene in both looks through DOSBox-X (`/SHOT=n /DUMP=`), as PNGs in `build/shots/`. After any drawing change, take them and look; copy good ones to `docs/img/` when they show something new.
-- `tools/run.sh [paper|ink]`: interactive, at about PC/XT speed.
+- `make dostest`: end-to-end tests in DOSBox-X (scanning, swapping, running games, the play log). Run it after any change to games, launching or swapping.
+- `tools/run.sh [paper|ink]`: interactive, at about PC/XT speed. Needs NASM too.
 
 ## Versioning
 

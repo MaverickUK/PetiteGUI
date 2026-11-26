@@ -41,6 +41,9 @@ jobs:
           curl -fsSL "https://github.com/open-watcom/open-watcom-v2/releases/download/$OPEN_WATCOM_BUILD/ow-snapshot.tar.xz" \
             | tar -xJ -C ~/opt/openwatcom
 
+      - name: Install NASM
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq nasm
+
       - name: Host tests
         run: make test
 
@@ -51,3 +54,32 @@ jobs:
         with:
           name: petite-exe
           path: build/PETITE.EXE
+
+  dos:
+    name: DOS tests (DOSBox-X)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Open Watcom
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/opt/openwatcom
+          key: openwatcom-${{ env.OPEN_WATCOM_BUILD }}
+
+      - name: Install Open Watcom
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/opt/openwatcom
+          curl -fsSL "https://github.com/open-watcom/open-watcom-v2/releases/download/$OPEN_WATCOM_BUILD/ow-snapshot.tar.xz" \
+            | tar -xJ -C ~/opt/openwatcom
+
+      - name: Install NASM and DOSBox-X
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq nasm dosbox-x
+
+      - name: End-to-end tests
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: make dostest

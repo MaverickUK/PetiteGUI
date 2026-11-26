@@ -1,0 +1,6 @@
+name:Memory Test
+exec:FREEMEM.EXE C:\OUT\RUN.TXT hello world
+developer:PetiteGUI
+genre:Test
+year:1991
+; a comment: ignored

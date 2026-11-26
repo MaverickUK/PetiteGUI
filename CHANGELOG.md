@@ -2,6 +2,24 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.2.0] - 2026-11-26
+
+GameMinder's games, run with PetiteGUI swapped out of memory.
+
+### Added
+
+- **A Games window** (a joystick icon on the desktop, a Games menu, Ctrl+G) listing the games under `ScanPath` that have GameMinder's `!GM_INFO.TXT`, by name, with their years. The first time it opens it scans and saves `PETITE.IDX` beside `PETITE.EXE`; **Games › Rescan** scans again. The scan shows its progress.
+- **Running games** with a double-click, Enter or Games › Run, and their setup programs with Games › Run setup, by GameMinder's rules: `exec:` with its arguments, batch files through `COMMAND.COM`, `before:` and `after:` in one batch file with the game, and a warning when `memory:` won't fit.
+- **Memory swapping** while a game runs: everything but a ~1.8 KB stub goes to EMS, or to `SWAP.$$$` without EMS (`src/swapcore.asm`, TurboPower's ExecWithSwap by way of GameMinder's NASM port). The games list's memory is handed back to DOS first, and read back from the index afterwards.
+- **Play stats** in each game's `!GM_LOG.TXT`, in GameMinder's format.
+- `PETITE.CFG` (`scanpath`, `useems`, `playstats`), and `/SCAN`, `/LIST`, `/RUN=name` and `/MEM` on the command line.
+- `tools/dostest.sh`: end-to-end tests in DOSBox-X, with fixture games and a stand-in game that records the memory it was given. Host tests for the metadata and launch rules (`src/gminfo.c`).
+
+### Changed
+
+- Menus and alerts save the pixels under them in DOS memory blocks rather than Open Watcom's far heap, which keeps freed blocks: they'd have stayed allocated under a game.
+- Long names in lists are cut short before the right-hand column.
+
 ## [0.1.0] - 2026-11-26
 
 The basics, in two looks.
@@ -22,4 +40,5 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.2.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.2.0
 [0.1.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.1.0

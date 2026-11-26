@@ -10,6 +10,10 @@ draw.c     the desktop's widgets, drawn from the state in App A
 gfx.c      clipping, text, masks, save/restore: the only drawing calls draw.c makes
 drv_*.c    one video mode's memory: fill, pattern, span, xor, save, restore, dump
 mouse.c    INT 33h
+games.c    the games list: PETITE.CFG, scanning for !GM_INFO.TXT, PETITE.IDX
+launch.c   running a game as GameMinder does, and its play log
+gminfo.c   GameMinder's formats and launch rules, pure C (host tested)
+swap.c     EMS or the swap file, then swapcore.asm, which runs the game
 ```
 
 A **driver** (`gfx.h`'s `Driver`) knows one mode's memory layout and nothing else; it gets coordinates already clipped to the screen. **gfx** clips everything to the current clip rectangle first, so the widgets can draw anywhere. A **theme** (`theme.c`) is the colour table the widgets use. Paper is `drv_cga` with `theme_paper`, Ink is `drv_ega` with `theme_ink`: every widget is shared.
@@ -53,11 +57,37 @@ The program polls: `mouse_read` (function 3) for the position and buttons, `kbhi
 
 ## Memory
 
-Small model: up to 64 KB of code and 64 KB of data. Saved rectangles come from the far heap (`_fmalloc`). The program is about 33 KB.
+Small model: up to 64 KB of code and 64 KB of data. Open Watcom's startup shrinks the program's DOS memory block to just the program (about 66 KB with its 8 KB stack), so the rest of conventional memory is free.
+
+Anything else PetiteGUI needs comes from DOS directly (`_dos_allocmem`): the pixels under a menu or alert, and the games list (500 games, 61 KB). Not from the C far heap: Open Watcom's `_ffree` keeps freed blocks for reuse, and a block kept would sit under a game while it runs.
+
+## Running games with PetiteGUI swapped out
+
+`src/swapcore.asm` is TurboPower's ExecWithSwap (1988, free with credit), by way of GameMinder's NASM port. The Makefile links it first, so it's the first code after the PSP, and everything after its `FirstToSave` label (the rest of the code, the data, the stack) can be moved out:
+
+1. `swap.c` checks no interrupt vector points into that memory (it would crash the machine), then allocates EMS for it, or creates `SWAP.$$$` (hidden) in `%TEMP%`.
+2. `swap_core` copies the program path and command line into its own code segment, switches to a stack there, copies everything from `FirstToSave` to the end of the block out, and shrinks the block to end at `FirstToSave` (DOS function 4Ah). About 1.8 KB, with the PSP, stays.
+3. It runs the program (4B00h), grows the block back, copies everything back, and returns.
+
+Before that, `run_game` frees the games list and any other DOS blocks, resets the mouse driver and returns to text mode; afterwards it sets the video mode again, re-initialises the mouse, reads the games list back from `PETITE.IDX` and redraws the desktop.
+
+If a program leaves something resident (a TSR from a `before:` line, say) in the memory PetiteGUI needs back, the block can't grow again: the core says why and quits to DOS, as GameMinder does.
+
+## Games
+
+`!GM_INFO.TXT` is GameMinder's: `key:value` lines, `;` for comments. PetiteGUI reads `name`, `year` and `genre` when scanning, and the whole file afresh when a game runs. The rules for running one are GameMinder's (`gminfo.c`):
+
+- `exec:` is the program and its arguments; without a drive or leading backslash it's in the game's directory, which becomes the current one.
+- A batch file can't be EXEC'd, so it runs as `COMSPEC /C file`.
+- With `before:` or `after:`, the three run from one batch file (`PETITE.BAT`), the game with `CALL` if it's a batch file itself.
+- Each play adds `>yyyy/mm/dd hh:mm` to `!GM_LOG.TXT` as it starts and `<minutes` when it ends.
+
+The scan walks every directory under each `ScanPath` entry. `PETITE.IDX` records the `ScanPath` it was made for, so changing `ScanPath` makes the next open scan again.
 
 ## Next
 
 - Speed on a real 8088: the inner loops (fills, text, spans) into NASM, after measuring.
 - Real directories in the windows (DOS `findfirst`/`findnext`).
+- More of GameMinder: sorting and filtering the games list, a game's details and play stats, adding and editing `!GM_INFO.TXT`.
 - Resizing windows; more than two.
 - Arcade (CGA 320×200, 4 colours) and Bevel (EGA 640×350) as further drivers: see [style-studies.html](style-studies.html).

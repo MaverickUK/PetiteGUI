@@ -10,5 +10,5 @@ if $CC -fsanitize=address,undefined -x c -o /dev/null - <<<'int main(void){retur
     FLAGS="$FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer"
 fi
 # shellcheck disable=SC2086
-$CC $FLAGS -o build/host/test_core tests/test_core.c src/rect.c src/util.c
+$CC $FLAGS -o build/host/test_core tests/test_core.c src/rect.c src/util.c src/gminfo.c
 build/host/test_core

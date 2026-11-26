@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Screenshots of every scene in both looks, through DOSBox-X with no window:
-# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2}.png.
+# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3}.png.
+# Scene 3 opens the games list, scanning the fixture games in tests/dos/GAMES.
 #
-#   tools/shot.sh            all six
+#   tools/shot.sh            all eight
 #   tools/shot.sh paper 1    one
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,6 +23,8 @@ shoot() { # look scene
     name=$(echo "$look$scene" | tr '[:lower:]' '[:upper:]')
     work=$(mktemp -d)
     cp build/PETITE.EXE "$work/"
+    cp -R tests/dos/GAMES "$work/GAMES"
+    printf 'scanpath:C:\\GAMES\n' > "$work/PETITE.CFG"
     cat > "$work/shot.conf" <<EOF
 [sdl]
 output=surface
@@ -56,7 +59,7 @@ if [ $# -eq 2 ]; then
     shoot "$1" "$2"
 else
     for look in paper ink; do
-        for scene in 0 1 2; do
+        for scene in 0 1 2 3; do
             shoot $look $scene
         done
     done

@@ -87,6 +87,17 @@ int mouse_init(void)
     return 1;
 }
 
+void mouse_shutdown(void)
+{
+    union REGS r;
+
+    if (!present)
+        return;
+    r.x.ax = 0;
+    int86(0x33, &r, &r);
+    present = 0;
+}
+
 int mouse_present(void)
 {
     return present;

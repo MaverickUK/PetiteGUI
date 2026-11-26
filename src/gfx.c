@@ -1,5 +1,5 @@
+#include <dos.h>
 #include <i86.h>
-#include <malloc.h>
 #include <string.h>
 #include "gfx.h"
 
@@ -148,20 +148,23 @@ void gfx_xor_frame(const Rect *r)
     xor_part(r->x + r->w - 2, r->y + 1, 2, r->h - 2);
 }
 
+/* Saved pixels go in DOS memory blocks of their own, not the C far heap: Open Watcom's
+ * _ffree keeps freed blocks for reuse, so they'd stay allocated under a game that's run.
+ * A DOS block is handed back the moment it's freed. */
 uint8_t __far *gfx_save(const Rect *r)
 {
     Rect a;
     long size;
+    unsigned seg;
     uint8_t __far *buf;
 
     if (!rect_intersect(&a, r, &SCREEN))
         return NULL;
     size = D->save_size(a.x, a.y, a.w, a.h);
-    if (size > 65000L)
+    if (size > 65000L || _dos_allocmem((unsigned)((size + 15) / 16), &seg) != 0)
         return NULL;
-    buf = (uint8_t __far *)_fmalloc((size_t)size);
-    if (buf != NULL)
-        D->save(a.x, a.y, a.w, a.h, buf);
+    buf = (uint8_t __far *)MK_FP(seg, 0);
+    D->save(a.x, a.y, a.w, a.h, buf);
     return buf;
 }
 
@@ -173,5 +176,5 @@ void gfx_restore(const Rect *r, uint8_t __far *buf)
         return;
     if (rect_intersect(&a, r, &SCREEN))
         D->restore(a.x, a.y, a.w, a.h, buf);
-    _ffree(buf);
+    _dos_freemem(FP_SEG(buf));
 }

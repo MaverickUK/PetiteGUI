@@ -3,9 +3,14 @@
  *   PETITE            Ink on an EGA or VGA, Paper on a CGA
  *   PETITE /CGA       Paper, whatever the card
  *   PETITE /EGA       Ink (needs an EGA or VGA)
+ *   PETITE /SCAN      scan for games now, rather than when the list is first opened
+ *   PETITE /LIST      print the games list (scanning if there's no index) and quit
+ *   PETITE /RUN=name  run the first game whose name contains name, then quit
+ *   PETITE /MEM       print what a swap would leave for a program, and quit
  *   PETITE /SHOT=n /DUMP=FILE.BIN
- *                     draw scene n (0 desktop, 1 File menu open, 2 alert), write video memory
- *                     to FILE.BIN and quit: tools/shot.sh turns it into a PNG
+ *                     draw scene n (0 desktop, 1 File menu open, 2 alert, 3 games list,
+ *                     4 the first game run from the list and back),
+ *                     write video memory to FILE.BIN and quit: tools/shot.sh makes a PNG
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
  * changes redraws only the rectangle it changed, back to front. */
@@ -15,8 +20,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "app.h"
+#include "games.h"
 #include "gfx.h"
+#include "launch.h"
 #include "mouse.h"
+#include "swap.h"
 #include "util.h"
 #include "version.h"
 
@@ -24,7 +32,8 @@ App A;
 
 enum {
     CMD_NONE, CMD_ABOUT, CMD_OPEN, CMD_INFO, CMD_NEW_FOLDER, CMD_COPY, CMD_DELETE,
-    CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK
+    CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK,
+    CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY
 };
 
 static MenuItem system_items[] = {
@@ -44,6 +53,15 @@ static MenuItem file_items[] = {
 static MenuItem view_items[] = {
     { "By name", NULL, MI_CHECK, CMD_BY_NAME },
     { "By size", NULL, 0, CMD_BY_SIZE },
+};
+static MenuItem games_items[] = {
+    { "Show games", "Ctrl+G", 0, CMD_GAMES },
+    { "", NULL, MI_SEP, 0 },
+    { "Run", "Enter", 0, CMD_RUN },
+    { "Run setup", NULL, 0, CMD_RUN_SETUP },
+    { "Game info...", "Ctrl+I", 0, CMD_INFO },
+    { "", NULL, MI_SEP, 0 },
+    { "Rescan", NULL, 0, CMD_RESCAN },
 };
 static MenuItem options_items[] = {
     { "Paper (CGA)", NULL, 0, CMD_PAPER },
@@ -85,6 +103,8 @@ static void sort_windows(void)
     for (i = 0; i < NUM_WINS; i++) {
         Win *w = &A.win[i];
 
+        if (w->kind != WIN_FILES)
+            continue;
         name[0] = '\0';
         if (w->sel >= 0)
             strcpy(name, w->rows[w->sel].name);
@@ -97,8 +117,8 @@ static void sort_windows(void)
 
 static void app_init(void)
 {
-    Win *a = &A.win[0], *c = &A.win[1];
-    static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Options" };
+    Win *a = &A.win[0], *c = &A.win[1], *g = &A.win[GAMES_WIN];
+    static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Games", "Options" };
     MenuItem *items[NUM_MENUS];
     int counts[NUM_MENUS], i, x = 16;
 
@@ -130,8 +150,13 @@ static void app_init(void)
     add_row(c, "TREE.COM", 6383, 0);
     c->sel = 10; /* README.TXT */
     c->open = 1;
-    A.z[0] = 0;
-    A.z[1] = 1;
+    g->kind = WIN_GAMES;
+    g->r = rect_make(40, MENU_H + 20, 432, 142);
+    g->title = "Games";
+    g->sel = -1;
+    A.z[0] = GAMES_WIN; /* closed until it's opened, then in front */
+    A.z[1] = 0;
+    A.z[2] = 1;
     sort_windows();
     {
         WinParts p; /* start scrolled so the selected row shows */
@@ -149,10 +174,14 @@ static void app_init(void)
     A.icon[1].kind = ICON_DISK;
     A.icon[1].y = MENU_H + 48;
     A.icon[1].win = 1;
-    A.icon[2].label = "Trash";
-    A.icon[2].kind = ICON_TRASH;
-    A.icon[2].y = SCREEN_H - 42;
-    A.icon[2].win = -1;
+    A.icon[2].label = "Games";
+    A.icon[2].kind = ICON_GAMES;
+    A.icon[2].y = MENU_H + 84;
+    A.icon[2].win = GAMES_WIN;
+    A.icon[3].label = "Trash";
+    A.icon[3].kind = ICON_TRASH;
+    A.icon[3].y = SCREEN_H - 42;
+    A.icon[3].win = -1;
     A.sel_icon = 1;
 
     items[0] = system_items;
@@ -161,8 +190,10 @@ static void app_init(void)
     counts[1] = COUNT(file_items);
     items[2] = view_items;
     counts[2] = COUNT(view_items);
-    items[3] = options_items;
-    counts[3] = COUNT(options_items);
+    items[3] = games_items;
+    counts[3] = COUNT(games_items);
+    items[4] = options_items;
+    counts[4] = COUNT(options_items);
     for (i = 0; i < NUM_MENUS; i++) {
         A.menu[i].title = titles[i];
         A.menu[i].items = items[i];
@@ -177,6 +208,11 @@ static void app_init(void)
 /* Check marks and greyed items that follow the state. */
 static void update_menus(void)
 {
+    int f = front_window(), game = f == GAMES_WIN && A.win[GAMES_WIN].sel >= 0;
+
+    games_items[2].flags = (uint8_t)(game ? 0 : MI_OFF);
+    games_items[3].flags = (uint8_t)(game ? 0 : MI_OFF);
+    games_items[4].flags = (uint8_t)(game ? 0 : MI_OFF);
     view_items[0].flags = (uint8_t)(A.sort_by_size ? 0 : MI_CHECK);
     view_items[1].flags = (uint8_t)(A.sort_by_size ? MI_CHECK : 0);
     options_items[0].flags = (uint8_t)(A.theme == &theme_paper ? MI_CHECK : 0);
@@ -299,7 +335,7 @@ static void show_alert(const char *line1, const char *line2, const char *b0, con
     strncpy(A.alert.line2, line2, sizeof A.alert.line2 - 1);
     A.alert.button[0] = b0;
     A.alert.button[1] = b1;
-    A.alert.nbuttons = b1 ? 2 : 1;
+    A.alert.nbuttons = b0 == NULL ? 0 : (b1 ? 2 : 1);
     A.alert.cmd = cmd;
     alert_layout();
     r = A.alert.r;
@@ -313,6 +349,7 @@ static void show_alert(const char *line1, const char *line2, const char *b0, con
 }
 
 static void run(int cmd);
+static void launch_selected(int setup, int checked);
 
 /* Close the alert; ok runs its command. */
 static void close_alert(int ok)
@@ -522,10 +559,28 @@ static void press_window(int i, int x, int y)
         scroll_by(i, y < p.track.y + p.track.h / 2 ? -p.visible : p.visible);
         wait_release(&ux, &uy);
     } else if (rect_contains(&p.list, x, y)) {
+        static unsigned long last_time;
+        static int last_win = -1, last_row = -1;
+
         k = w->top + (y - p.list.y - 1) / ROW_H;
-        if (k < w->nrows)
+        if (k < w->nrows) {
+            int twice = i == last_win && k == last_row && ticks() - last_time < 9;
+
             select_row(i, k);
-        wait_release(&ux, &uy);
+            wait_release(&ux, &uy);
+            last_win = i;
+            last_row = k;
+            last_time = ticks();
+            if (twice) {
+                last_row = -1;
+                if (w->kind == WIN_GAMES)
+                    launch_selected(0, 0);
+                else
+                    run(CMD_INFO);
+            }
+        } else {
+            wait_release(&ux, &uy);
+        }
     } else {
         wait_release(&ux, &uy);
     }
@@ -551,12 +606,166 @@ static void select_icon(int i)
     }
 }
 
+static void open_games(void);
+
 static void open_icon(int i)
 {
-    if (A.icon[i].win >= 0)
+    if (A.icon[i].win == GAMES_WIN)
+        open_games();
+    else if (A.icon[i].win >= 0)
         open_window(A.icon[i].win);
     else
         show_alert("The trash is empty.", "", "OK", NULL, CMD_NONE);
+}
+
+/* ---- Games ---- */
+
+static int old_video_mode = 3;
+static int pending_setup;
+
+/* The scan's progress, in an alert with no buttons: how many found, and where it is. */
+static void scan_progress(const char *dir, int found)
+{
+    char line[40];
+    size_t n = strlen(dir);
+
+    sprintf(line, "Looking for games: %d found", found);
+    strcpy(A.alert.line1, line);
+    if (n > 28)
+        sprintf(line, "...%s", dir + n - 25);
+    else
+        strcpy(line, dir);
+    sprintf(A.alert.line2, "%-28s", line);
+    mouse_hide();
+    draw_alert();
+    mouse_show();
+}
+
+static void games_window_reset(void)
+{
+    Win *w = &A.win[GAMES_WIN];
+
+    w->nrows = games_count();
+    w->sel = w->nrows > 0 ? 0 : -1;
+    w->top = 0;
+}
+
+static void scan_now(void)
+{
+    char blank[30];
+    int n;
+
+    sprintf(blank, "%-28s", "");
+    show_alert("Looking for games: 0 found", blank, NULL, NULL, CMD_NONE);
+    n = games_scan(scan_progress);
+    close_alert(0);
+    games_window_reset();
+    if (n < 0)
+        show_alert("No memory for the games list.", "", "OK", NULL, CMD_NONE);
+}
+
+/* Open the games list: the first time, read the index, or scan if there isn't one. */
+static void open_games(void)
+{
+    if (!games_loaded()) {
+        if (games_load_index())
+            games_window_reset();
+        else
+            scan_now();
+    }
+    open_window(GAMES_WIN);
+    if (games_loaded() && games_count() == 0)
+        show_alert("No games found. Add !GM_INFO.TXT", "files, then Games > Rescan.", "OK", NULL, CMD_NONE);
+}
+
+static void rescan(void)
+{
+    scan_now();
+    if (A.win[GAMES_WIN].open)
+        redraw_window(GAMES_WIN);
+    else
+        open_window(GAMES_WIN);
+}
+
+/* Leave the desktop for a text screen, run the game, come back. */
+static unsigned run_game(const Game *g, const GameInfo *info, int setup)
+{
+    unsigned status;
+    union REGS r;
+
+    mouse_hide();
+    mouse_shutdown();
+    games_free(); /* its memory goes back to DOS for the game */
+    r.h.ah = 0;
+    r.h.al = (unsigned char)old_video_mode;
+    int86(0x10, &r, &r);
+    status = launch_run(g->dir, info, setup);
+
+    while (kbhit())
+        getch();
+    gfx_start(gfx_driver());
+    mouse_init();
+    if (!games_load_index())
+        games_window_reset();
+    A.win[GAMES_WIN].nrows = games_count();
+    draw_desktop(&FULL);
+    mouse_show();
+    return status;
+}
+
+static void launch_selected(int setup, int checked)
+{
+    Win *w = &A.win[GAMES_WIN];
+    char prog[GM_PATH_MAX], line[40];
+    GameInfo info;
+    Game g;
+    long free_kb;
+    unsigned status;
+
+    if (w->sel < 0 || w->sel >= games_count())
+        return;
+    games_get(w->sel, &g);
+    if (!launch_read_info(g.dir, &info)) {
+        show_alert(g.name, launch_error_text(LAUNCH_NO_INFO), "OK", NULL, CMD_NONE);
+        return;
+    }
+    if ((setup ? info.setup : info.exec)[0] == '\0') {
+        show_alert(g.name, setup ? "It has no setup program." : launch_error_text(LAUNCH_NO_EXEC),
+                   "OK", NULL, CMD_NONE);
+        return;
+    }
+    launch_program(g.dir, &info, setup, prog, sizeof prog);
+    if (!launch_exists(prog)) {
+        sprintf(line, "Can't find %.26s", strrchr(prog, '\\') ? strrchr(prog, '\\') + 1 : prog);
+        show_alert(g.name, line, "OK", NULL, CMD_NONE);
+        return;
+    }
+    free_kb = swap_free_kb();
+    if (!setup && !checked && info.memory_kb > 0 && (long)info.memory_kb > free_kb) {
+        pending_setup = setup;
+        sprintf(line, "Needs %u KB; %ld KB is free.", info.memory_kb, free_kb);
+        show_alert(line, "It may not run.", "Cancel", "Run", CMD_RUN_ANYWAY);
+        return;
+    }
+    status = run_game(&g, &info, setup);
+    if (status != 0)
+        show_alert("Couldn't run it:", launch_error_text(status), "OK", NULL, CMD_NONE);
+}
+
+static void game_info(void)
+{
+    Win *w = &A.win[GAMES_WIN];
+    char line[40];
+    Game g;
+
+    if (w->sel < 0)
+        return;
+    games_get(w->sel, &g);
+    if (g.genre[0] && g.year[0])
+        sprintf(line, "%s, %s", g.genre, g.year);
+    else
+        strcpy(line, g.genre[0] ? g.genre : g.year);
+    show_alert(g.name, line, "OK", NULL, CMD_NONE);
 }
 
 /* ---- Commands ---- */
@@ -585,11 +794,32 @@ static void run(int cmd)
         show_alert(line, "A small desktop for CGA/EGA.", "OK", NULL, CMD_NONE);
         break;
     case CMD_OPEN:
-        if (A.sel_icon >= 0)
+        if (f == GAMES_WIN)
+            launch_selected(0, 0);
+        else if (A.sel_icon >= 0)
             open_icon(A.sel_icon);
         break;
+    case CMD_GAMES:
+        open_games();
+        break;
+    case CMD_RUN:
+        if (f == GAMES_WIN)
+            launch_selected(0, 0);
+        break;
+    case CMD_RUN_SETUP:
+        if (f == GAMES_WIN)
+            launch_selected(1, 0);
+        break;
+    case CMD_RUN_ANYWAY:
+        launch_selected(pending_setup, 1);
+        break;
+    case CMD_RESCAN:
+        rescan();
+        break;
     case CMD_INFO:
-        if (w == NULL || w->sel < 0) {
+        if (f == GAMES_WIN)
+            game_info();
+        else if (w == NULL || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
         } else if (w->rows[w->sel].dir) {
             show_alert(w->rows[w->sel].name, "A folder.", "OK", NULL, CMD_NONE);
@@ -600,7 +830,9 @@ static void run(int cmd)
         }
         break;
     case CMD_DELETE:
-        if (w == NULL || w->sel < 0) {
+        if (f == GAMES_WIN) {
+            show_alert("Remove games in GameMinder:", "it deletes their !GM_INFO.TXT.", "OK", NULL, CMD_NONE);
+        } else if (w == NULL || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
         } else {
             sprintf(line, "Delete %s?", w->rows[w->sel].name);
@@ -743,6 +975,8 @@ static void on_key(int ch)
         return;
     }
     switch (ch) {
+    case 13: if (f == GAMES_WIN) run(CMD_RUN); break; /* Enter */
+    case 7: run(CMD_GAMES); break;   /* Ctrl+G */
     case 15: run(CMD_OPEN); break;   /* Ctrl+O */
     case 9: run(CMD_INFO); break;    /* Ctrl+I */
     case 23: run(CMD_CLOSE); break;  /* Ctrl+W */
@@ -772,6 +1006,13 @@ static int shot(int scene, const char *path)
         set_hot(FILE_DELETE);
     } else if (scene == 2) {
         run(CMD_DELETE);
+    } else if (scene == 3) {
+        open_games();
+    } else if (scene == 4) { /* run the first game from the list, then come back (tools/dostest.sh) */
+        open_games();
+        select_row(GAMES_WIN, 0);
+        launch_selected(0, 1);
+        mouse_hide(); /* the pointer isn't part of the picture */
     }
     f = fopen(path, "wb");
     if (f == NULL)
@@ -781,9 +1022,76 @@ static int shot(int scene, const char *path)
     return ok;
 }
 
+/* ---- The command line ---- */
+
+static int print_memory(void)
+{
+    printf("PetiteGUI %s\n", PETITE_VERSION);
+    printf("Program in memory:   %ld bytes\n", swap_bytes() + swap_resident_bytes());
+    printf("Left while swapped:  %ld bytes\n", swap_resident_bytes());
+    printf("Swapped out:         %ld bytes, to %s\n", swap_bytes(),
+           S.use_ems && swap_ems_present() && swap_ems_free_kb() * 1024L >= swap_bytes() ? "EMS" : "SWAP.$$$");
+    printf("Free for a program:  %ld KB\n", swap_free_kb());
+    printf("EMS free:            %ld KB\n", swap_ems_free_kb());
+    return 0;
+}
+
+static int print_games(void)
+{
+    Game g;
+    int k;
+
+    for (k = 0; k < games_count(); k++) {
+        games_get(k, &g);
+        printf("%-32s %-4s %s\n", g.name, g.year, g.dir);
+    }
+    printf("%d game%s in %s\n", games_count(), games_count() == 1 ? "" : "s", S.scan_path);
+    return 0;
+}
+
+static int run_by_name(const char *name)
+{
+    char upper_name[40], upper_want[40], prog[GM_PATH_MAX];
+    GameInfo info;
+    Game g;
+    unsigned status;
+    int k;
+
+    strncpy(upper_want, name, sizeof upper_want - 1);
+    upper_want[sizeof upper_want - 1] = '\0';
+    strupr(upper_want);
+    for (k = 0; k < games_count(); k++) {
+        games_get(k, &g);
+        strcpy(upper_name, g.name);
+        strupr(upper_name);
+        if (strstr(upper_name, upper_want) != NULL)
+            break;
+    }
+    if (k == games_count()) {
+        printf("No game matches %s\n", name);
+        return 1;
+    }
+    if (!launch_read_info(g.dir, &info)) {
+        printf("%s\n", launch_error_text(LAUNCH_NO_INFO));
+        return 1;
+    }
+    launch_program(g.dir, &info, 0, prog, sizeof prog);
+    if (!launch_exists(prog)) {
+        printf("%s: %s\n", prog, launch_error_text(2));
+        return 1;
+    }
+    games_free();
+    status = launch_run(g.dir, &info, 0);
+    if (status != 0)
+        printf("Couldn't run it: %s (%u)\n", launch_error_text(status), status);
+    return status != 0;
+}
+
 int main(int argc, char **argv)
 {
     int i, scene = -1, force = 0, old_mode = video_mode(), x, y, b, prev = 0, ch;
+    int scan = 0, list = 0, mem = 0;
+    const char *run_name = NULL;
     const char *dump = "SHOT.BIN";
     unsigned long next_clock = 0;
     char clock[6];
@@ -797,10 +1105,31 @@ int main(int argc, char **argv)
             scene = atoi(argv[i] + 6);
         else if (strnicmp(argv[i], "/DUMP=", 6) == 0)
             dump = argv[i] + 6;
+        else if (stricmp(argv[i], "/SCAN") == 0)
+            scan = 1;
+        else if (stricmp(argv[i], "/LIST") == 0)
+            list = 1;
+        else if (stricmp(argv[i], "/MEM") == 0)
+            mem = 1;
+        else if (strnicmp(argv[i], "/RUN=", 5) == 0)
+            run_name = argv[i] + 5;
         else {
-            printf("PetiteGUI %s\nUsage: PETITE [/CGA | /EGA]\n", PETITE_VERSION);
+            printf("PetiteGUI %s\nUsage: PETITE [/CGA | /EGA] [/SCAN] [/LIST] [/RUN=name] [/MEM]\n",
+                   PETITE_VERSION);
             return 1;
         }
+    }
+    settings_load(argv[0]);
+    old_video_mode = old_mode;
+    if (mem)
+        return print_memory();
+    if (scan || list || run_name != NULL) {
+        if (scan || !games_load_index())
+            games_scan(NULL);
+        if (list)
+            return print_games();
+        if (run_name != NULL)
+            return run_by_name(run_name);
     }
 
     app_init();
