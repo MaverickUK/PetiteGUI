@@ -14,6 +14,9 @@ games.c    the games list: PETITE.CFG, scanning for !GM_INFO.TXT, PETITE.IDX
 launch.c   running a game as GameMinder does, and its play log
 gminfo.c   GameMinder's formats and launch rules, pure C (host tested)
 swap.c     EMS or the swap file, then swapcore.asm, which runs the game
+files.c    a directory window's listing (findfirst/findnext)
+edit.c     the text editor: opening, saving, keys, the view
+textbuf.c  its gap buffer, pure C (host tested)
 ```
 
 A **driver** (`gfx.h`'s `Driver`) knows one mode's memory layout and nothing else; it gets coordinates already clipped to the screen. **gfx** clips everything to the current clip rectangle first, so the widgets can draw anywhere. A **theme** (`theme.c`) is the colour table the widgets use. Paper is `drv_cga` with `theme_paper`, Ink is `drv_ega` with `theme_ink`: every widget is shared.
@@ -73,6 +76,20 @@ Before that, `run_game` frees the games list and any other DOS blocks, resets th
 
 If a program leaves something resident (a TSR from a `before:` line, say) in the memory PetiteGUI needs back, the block can't grow again: the core says why and quits to DOS, as GameMinder does.
 
+## Folders
+
+The A: and C: windows list a directory with DOS `findfirst`/`findnext`, up to 160 entries (the info line says "First 160 items" past that), folders first and `..` at the top in a subdirectory. The window's `path` ends with a backslash and is its title, cut from the left when it's too long.
+
+While the desktop is up, PetiteGUI answers DOS's critical errors (`INT 24h`) with Fail, so an empty floppy drive makes the window say it isn't ready instead of DOS writing "Abort, Retry, Fail?" over the graphics. That handler is in PetiteGUI's memory, so it's taken out before a game runs and put back after.
+
+## The text editor
+
+One file at a time, up to 60,000 bytes, in a DOS memory block with 16 KB to grow. The text is a gap buffer (`textbuf.c`): the file's two halves sit at either end of the block with a gap at the caret, so typing moves only the text between this edit and the last one, never the whole file. CR LF becomes `\n` when the file's read, and goes back when it's saved, if the file had them.
+
+The editor keeps its caret and view as character positions and line numbers, updated as it goes rather than counted from the start of the file at each key. A key redraws only the caret's old and new rows, unless the view scrolled or a line was added or removed.
+
+Saving writes `PETITE.$$$` beside the file, then replaces the file with it, so a full disk leaves the file as it was. Before a game runs, the editor's text is freed (with any changes saved first: it won't run a game until they are) and read back after, at the same place.
+
 ## Games
 
 `!GM_INFO.TXT` is GameMinder's: `key:value` lines, `;` for comments. PetiteGUI reads `name`, `year` and `genre` when scanning, and the whole file afresh when a game runs. The rules for running one are GameMinder's (`gminfo.c`):
@@ -87,7 +104,7 @@ The scan walks every directory under each `ScanPath` entry. `PETITE.IDX` records
 ## Next
 
 - Speed on a real 8088: the inner loops (fills, text, spans) into NASM, after measuring.
-- Real directories in the windows (DOS `findfirst`/`findnext`).
 - More of GameMinder: sorting and filtering the games list, a game's details and play stats, adding and editing `!GM_INFO.TXT`.
-- Resizing windows; more than two.
+- Resizing windows; more than one directory window per drive; copying, moving and new folders; deleting folders.
+- The editor: selecting text, cut and paste, find, horizontal scrolling with the mouse.
 - Arcade (CGA 320×200, 4 colours) and Bevel (EGA 640×350) as further drivers: see [style-studies.html](style-studies.html).

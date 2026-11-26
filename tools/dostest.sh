@@ -22,6 +22,7 @@ mkdir -p "$work/PETITE" "$work/GUI" "$work/OUT"
 cp build/PETITE.EXE "$work/PETITE/"
 cp build/PETITE.EXE "$work/GUI/"
 printf 'scanpath:C:\\GAMES\\MEMTEST\n' > "$work/GUI/PETITE.CFG"
+printf 'one\r\ntwo\r\n' > "$work/OUT/EDIT.TXT"
 cp -R tests/dos/GAMES "$work/GAMES"
 (cd "$work" && WATCOM=$WATCOM INCLUDE=$WATCOM/h PATH=$OWBIN:$PATH \
     "$OWBIN/wcl" -q -bt=dos -ms -0 -fe=GAMES/MEMTEST/FREEMEM.EXE "$OLDPWD/tests/dos/freemem.c" >/dev/null)
@@ -53,6 +54,7 @@ PETITE /RUN=memory > C:\\OUT\\RUN3.TXT
 PETITE /RUN=noname > C:\\OUT\\RUN4.TXT
 cd \\GUI
 PETITE /CGA /SHOT=4 /DUMP=C:\\OUT\\BACK.BIN > C:\\OUT\\GUI.TXT
+PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
 dir /a C:\\PETITE > C:\\OUT\\DIR.TXT
 exit
 EOF
@@ -114,6 +116,9 @@ if os.path.exists(os.path.join(w, "OUT", "BACK.BIN")):
     os.makedirs("build/shots", exist_ok=True)
     os.system("python3 tools/dump2png.py '%s' build/shots/back.png" % os.path.join(w, "OUT", "BACK.BIN"))
     print("     the desktop after the game: build/shots/back.png")
+edited = open(os.path.join(w, "OUT", "EDIT.TXT"), "rb").read()
+check(edited == b"Hi\r\none\r\ntwo\r\n!", "the editor saved a typed line and kept CR LF: %r" % edited)
+check(not os.path.exists(os.path.join(w, "OUT", "PETITE.$$$")), "no temporary file left from saving")
 print("%d failed" % len(fails))
 sys.exit(1 if fails else 0)
 EOF

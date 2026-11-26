@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "app.h"
+#include "edit.h"
 #include "games.h"
 #include "gfx.h"
 #include "util.h"
@@ -177,8 +178,12 @@ static Rect menu_box(int mi)
         if (m->items[i].key)
             key_w = imax(key_w, gfx_text_w(m->items[i].key));
     }
-    w = text_left(m) + name_w + (key_w ? 24 + key_w : 0) + 8;
-    return rect_make(SNAP8(m->x - 8), MENU_H, SNAP8_UP(w), h);
+    w = SNAP8_UP(text_left(m) + name_w + (key_w ? 24 + key_w : 0) + 8);
+    if (m->y == 0) /* under its title on the menu bar */
+        return rect_make(SNAP8(m->x - 8), MENU_H, w, h);
+    /* the right-click menu: at the pointer, kept on the screen */
+    return rect_make(imax(0, m->x + w + SHADOW_X > SCREEN_W ? SCREEN_W - w - SHADOW_X : m->x),
+                     imax(MENU_H + 1, m->y + h + SHADOW_Y > SCREEN_H ? SCREEN_H - h - SHADOW_Y : m->y), w, h);
 }
 
 Rect menu_rect(int mi)
@@ -419,6 +424,55 @@ static void row_text(const Win *w, int k, char *name, char *right, int *kind)
     *kind = w->rows[k].dir ? ROW_DIR : ROW_FILE;
 }
 
+/* The editor's window below its title bar: where the caret is, the text, the caret. */
+static void draw_editor(const Win *w, const WinParts *p, int active)
+{
+    char buf[40], text[100];
+    int row, col, cr, cc, ry, x0 = p->list.x + 4;
+    unsigned len = tb_len(&E.t);
+    Rect old_clip, list;
+    Win view = *w;
+
+    sprintf(buf, "Line %u, Col %u", E.cur_line + 1, tb_col(&E.t, E.cur) + 1);
+    gfx_text(p->info.x + 8, p->info.y + 1, buf, T->text, 0);
+    if (E.modified)
+        strcpy(buf, "Not saved");
+    else
+        fmt_thousands((long)len, buf), strcat(buf, " characters");
+    gfx_text(p->info.x + p->info.w - 8 - gfx_text_w(buf), p->info.y + 1, buf, T->text, 0);
+    hline(p->info.x, p->info.y + ROW_H + 1, p->info.w, T->frame);
+
+    view.nrows = (int)E.lines; /* the scroll bar follows the view */
+    view.top = (int)E.top_line;
+    draw_scrollbar(&view, p, active);
+
+    old_clip = gfx_get_clip();
+    rect_intersect(&list, &p->list, &old_clip);
+    if (rect_empty(&list))
+        return;
+    gfx_set_clip(&list);
+    for (row = 0; row < E.rows; row++) {
+        ry = p->list.y + 2 + row * ROW_H;
+        if (ry >= list.y + list.h || ry + ROW_H <= list.y)
+            continue;
+        if (edit_row_text(row, text) < 0)
+            break;
+        gfx_text(x0, ry, text, T->text, 0);
+    }
+    if (edit_caret(&cr, &cc) && active) { /* the character under the caret, inverted */
+        ry = p->list.y + 2 + cr * ROW_H;
+        edit_row_text(cr, text);
+        col = cc;
+        gfx_fill(x0 + col * 8, ry - 1, 8, ROW_H, T->sel);
+        if (col < (int)strlen(text)) {
+            buf[0] = text[col];
+            buf[1] = '\0';
+            gfx_text(x0 + col * 8, ry, buf, T->sel_text, 0);
+        }
+    }
+    gfx_set_clip(&old_clip);
+}
+
 void draw_window(int i)
 {
     const Win *w = &A.win[i];
@@ -427,7 +481,7 @@ void draw_window(int i)
     int r, k, tx, tw, ry, nx, name_w = 0;
     int right_w = 0, right_x, show_right, max_chars;
     uint8_t tc, c;
-    char buf[24], right[24], name[40];
+    char buf[24], right[24], name[40], title[72];
     const char *info_right;
     Rect old_clip, list;
 
@@ -448,11 +502,19 @@ void draw_window(int i)
         tc = active ? T->title_on_text : T->title_off_text;
     }
     hline(p.title.x, p.title.y + TITLE_H, p.title.w, T->frame);
-    tw = gfx_text_w(w->title);
+    /* The title, cut from the left if it's too long: "...\GAMES\KEEN\" */
+    k = (p.title.w - 64) / 8;
+    if ((int)strlen(w->title) > k && k > 4)
+        sprintf(title, "...%s", w->title + strlen(w->title) - (k - 3));
+    else
+        strncpy(title, w->title, sizeof title - 1), title[sizeof title - 1] = '\0';
+    if (w->kind == WIN_EDIT && E.modified && strlen(title) < sizeof title - 3)
+        strcat(title, " *");
+    tw = gfx_text_w(title);
     tx = p.title.x + (p.title.w - tw) / 2;
     if (T->stripes && active)
         gfx_fill(tx - 8, p.title.y + 1, tw + 16, TITLE_H - 2, T->win_bg);
-    gfx_text(tx, p.title.y + 2, w->title, tc, 0);
+    gfx_text(tx, p.title.y + 2, title, tc, 0);
     if (!T->stripes || active) {
         if (T->stripes)
             gfx_fill(p.close.x - 3, p.title.y + 1, p.close.w + 6, TITLE_H - 2, T->win_bg);
@@ -461,12 +523,20 @@ void draw_window(int i)
         gfx_frame(p.close.x, p.close.y, p.close.w, p.close.h, tc);
     }
 
+    if (w->kind == WIN_EDIT) {
+        draw_editor(w, &p, active);
+        return;
+    }
+
     /* Info line */
     if (w->kind == WIN_GAMES) {
         sprintf(buf, "%d game%s", w->nrows, w->nrows == 1 ? "" : "s");
         info_right = S.scan_path;
+    } else if (w->not_ready) {
+        sprintf(buf, "%c: isn't ready", w->path[0]);
+        info_right = "";
     } else {
-        sprintf(buf, "%d item%s", w->nrows, w->nrows == 1 ? "" : "s");
+        sprintf(buf, "%s%d item%s", w->truncated ? "First " : "", w->nrows, w->nrows == 1 ? "" : "s");
         fmt_thousands(w->free_kb, right);
         strcat(right, " KB free");
         info_right = right;

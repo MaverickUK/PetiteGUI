@@ -15,11 +15,13 @@
 #define SHADOW_X 2
 #define SHADOW_Y 1
 
-#define MAX_ROWS 16
-#define NUM_WINS 3
+#define MAX_ROWS 160 /* files a directory window lists */
+#define NUM_WINS 4
 #define NUM_ICONS 4
-#define NUM_MENUS 5
-#define GAMES_WIN 2 /* the games list's window */
+#define NUM_MENUS 5    /* on the menu bar */
+#define CONTEXT_MENU NUM_MENUS /* the right-click menu, after them */
+#define GAMES_WIN 2    /* the games list's window */
+#define EDIT_WIN 3     /* the text editor's */
 
 typedef struct Row {
     char name[13];
@@ -27,15 +29,19 @@ typedef struct Row {
     uint8_t dir;
 } Row;
 
-enum { WIN_FILES, WIN_GAMES };
+enum { WIN_FILES, WIN_GAMES, WIN_EDIT };
 
 typedef struct Win {
     int kind;
     Rect r;
     const char *title;
-    Row rows[MAX_ROWS];
+    char path[80];     /* a directory window's, ending in a backslash */
+    Row *rows;         /* a directory window's, cap of them */
+    int cap;
     int nrows, sel, top;
     uint8_t open;
+    uint8_t truncated; /* more files than cap */
+    uint8_t not_ready; /* the drive couldn't be read */
     long free_kb;
 } Win;
 
@@ -66,14 +72,16 @@ typedef struct Menu {
     const char *title;
     MenuItem *items;
     int n;
-    int x; /* the title's text */
+    int x; /* the title's text; for the right-click menu, its left edge */
+    int y; /* the right-click menu's top; 0 for the menu bar's */
 } Menu;
 
 typedef struct Alert {
     char line1[40], line2[40];
     const char *button[2];
     int nbuttons; /* the last is the default */
-    int cmd;      /* run when the default is chosen */
+    int cmd;      /* run when the default (last) button is chosen */
+    int cmd_alt;  /* run when the first of two is chosen (Esc runs neither) */
     Rect r, b[2];
 } Alert;
 
@@ -82,7 +90,7 @@ typedef struct App {
     int z[NUM_WINS]; /* back to front */
     Icon icon[NUM_ICONS];
     int sel_icon;
-    Menu menu[NUM_MENUS];
+    Menu menu[NUM_MENUS + 1];
     int open_menu, hot; /* -1 when none */
     uint8_t __far *menu_save;
     int alert_on;

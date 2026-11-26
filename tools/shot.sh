@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Screenshots of every scene in both looks, through DOSBox-X with no window:
-# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3}.png.
+# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6}.png.
 # Scene 3 opens the games list, scanning the fixture games in tests/dos/GAMES.
 #
-#   tools/shot.sh            all eight
+#   tools/shot.sh            all twelve
 #   tools/shot.sh paper 1    one
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -59,7 +59,7 @@ if [ $# -eq 2 ]; then
     shoot "$1" "$2"
 else
     for look in paper ink; do
-        for scene in 0 1 2 3; do
+        for scene in 0 1 2 3 5 6; do
             shoot $look $scene
         done
     done

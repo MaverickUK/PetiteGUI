@@ -2,6 +2,22 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-11-26
+
+Real folders, a text editor and right-click menus.
+
+### Added
+
+- **A text editor:** TXT, INI and CFG files open in it on a double-click (or Enter, or File › Open), and any file with **Open as text** (File menu, right-click, Ctrl+E). Arrows, Home/End, Page Up/Down, Ctrl+Home/End, Backspace, Delete, Enter, Tab (spaces to the next column of 4), a click to place the caret; **Save** (Ctrl+S) keeps the file's CR LF line ends, writing to `PETITE.$$$` first so a full disk can't lose the file. Closing or quitting with changes asks to save. Files up to 60,000 bytes, held as a gap buffer (`src/textbuf.c`, host tested) in a DOS memory block that's handed back while a game runs and read back after.
+- **Right-click menus:** on a file (Open, Open as text, Info, Delete) and on a game (Run, Run setup, Game info).
+- `/SHOT` scenes 5 (the editor), 6 (the right-click menu) and 7 (an edit saved, checked by `tools/dostest.sh`).
+
+### Changed
+
+- **The A: and C: windows show real directories**, not sample files. Double-click a folder (or Enter, or File › Open) to go into it, and `..` (or Backspace) to go back up; the window's title is the path. A: starts closed, so a floppy drive isn't read until its window opens; an empty drive says it isn't ready rather than DOS asking "Abort, Retry, Fail?" over the desktop.
+- **Delete really deletes the file**, after asking (folders can't be deleted yet).
+- `tools/run.sh` sets up a drive with the sample games, at a 286's speed for Ink and an XT's for Paper, with EMS, and leaves DOSBox-X at the DOS prompt after Ctrl+Q.
+
 ## [0.2.0] - 2026-11-26
 
 GameMinder's games, run with PetiteGUI swapped out of memory.
@@ -40,5 +56,6 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.3.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.2.0
 [0.1.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.1.0

@@ -19,6 +19,7 @@ The basics first: desktop, menu bar and menus, windows, icons, alerts, the point
 - **Paper and Ink share everything but the driver and the theme.** A new widget takes its colours from `Theme`, never a literal.
 - **The swap core is the first code in memory:** `build/swapcore.obj` stays first in the Makefile's `OBJ`, and the map (`build/PETITE.MAP`) shows `_swap_core` near `0000:0000`. Everything after its `FirstToSave` is swapped out while a game runs.
 - **No C far heap** (`_fmalloc`): its freed blocks stay allocated, under a game. Use `_dos_allocmem`/`_dos_freemem`, and free every block before `swap_run`.
+- **Nothing of PetiteGUI's may be in use while a game runs:** `run_game` frees the games list and the editor's text, and takes out the `INT 24h` handler first; `swap_run` refuses if any vector still points into PetiteGUI.
 - **GameMinder compatibility:** `!GM_INFO.TXT`, `!GM_LOG.TXT` and the launch rules match GameMinder's (`~/Code/GameMinder`, QUICKSTART.md, LAUNCH.PAS, RUNNER.PAS). Change them there first.
 - **Pure code** (`rect.c`, `util.c`, `gminfo.c`) has no DOS headers, so `tests/run_tests.sh` builds it on the host. Keep logic that can be pure there.
 

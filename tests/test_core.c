@@ -5,6 +5,7 @@
 #include "../src/rect.h"
 #include "../src/util.h"
 #include "../src/gminfo.h"
+#include "../src/textbuf.h"
 
 static int failures, checks;
 
@@ -171,6 +172,79 @@ static void test_gm_time(void)
     CHECK(gm_elapsed_minutes(b, 10, a, 10) == 0); /* the clock went back */
 }
 
+static void test_paths(void)
+{
+    char p[64], child[16];
+
+    strcpy(p, "C:\\GAMES\\KEEN\\");
+    CHECK(path_parent(p, child, sizeof child));
+    CHECK(strcmp(p, "C:\\GAMES\\") == 0 && strcmp(child, "KEEN") == 0);
+    CHECK(path_parent(p, child, sizeof child));
+    CHECK(strcmp(p, "C:\\") == 0 && strcmp(child, "GAMES") == 0);
+    CHECK(!path_parent(p, child, sizeof child));
+    CHECK(strcmp(p, "C:\\") == 0);
+
+    CHECK(path_is_text("README.TXT") && path_is_text("setup.ini") && path_is_text("A.Cfg"));
+    CHECK(!path_is_text("GAME.EXE") && !path_is_text("TXT") && !path_is_text("X.TXTX") && !path_is_text("X.TX"));
+    CHECK(strcmp(path_ext("A.B.C"), "C") == 0 && strcmp(path_ext("NOEXT"), "") == 0);
+}
+
+/* The text as a C string, for comparing. */
+static void tb_str(const TextBuf *t, char *out)
+{
+    unsigned i;
+
+    for (i = 0; i < tb_len(t); i++)
+        out[i] = tb_at(t, i);
+    out[i] = '\0';
+}
+
+static void test_textbuf(void)
+{
+    char mem[64], out[80];
+    TextBuf t;
+    int crlf;
+    const char *file = "one\r\ntwo\r\n\r\nfour\x1a";
+    unsigned n = (unsigned)strlen(file), i;
+
+    /* load from the end of the buffer's own block, as the editor does */
+    tb_init(&t, mem, sizeof mem);
+    memcpy(mem + sizeof mem - n, file, n);
+    tb_load(&t, mem + sizeof mem - n, n, &crlf);
+    tb_str(&t, out);
+    CHECK(crlf && strcmp(out, "one\ntwo\n\nfour") == 0);
+    CHECK(tb_lines(&t) == 4);
+    CHECK(tb_line_of(&t, 4) == 1 && tb_line_of(&t, 0) == 0 && tb_line_of(&t, tb_len(&t)) == 3);
+
+    CHECK(tb_line_start(&t, 6) == 4 && tb_line_end(&t, 4) == 7 && tb_col(&t, 6) == 2);
+    CHECK(tb_next_line(&t, 4) == 8 && tb_next_line(&t, 8) == 9 && tb_next_line(&t, 9) == 9);
+    CHECK(tb_prev_line(&t, 9) == 8 && tb_prev_line(&t, 4) == 0 && tb_prev_line(&t, 0) == 0);
+    CHECK(tb_at_col(&t, 8, 3) == 8);          /* the empty line is shorter */
+    CHECK(tb_at_col(&t, 0, 2) == 2);
+
+    /* edits in the middle, then at the ends: the gap moves both ways */
+    CHECK(tb_insert(&t, 3, '!'));
+    CHECK(tb_insert(&t, 0, '>'));
+    CHECK(tb_delete(&t, 5));                  /* the first \n */
+    tb_str(&t, out);
+    CHECK(strcmp(out, ">one!two\n\nfour") == 0);
+    CHECK(tb_insert(&t, tb_len(&t), '\n'));
+    CHECK(!tb_delete(&t, tb_len(&t)));
+    tb_str(&t, out);
+    CHECK(strcmp(out, ">one!two\n\nfour\n") == 0 && tb_lines(&t) == 4);
+
+    /* a full block refuses more */
+    for (i = 0; tb_insert(&t, 0, 'x'); i++)
+        ;
+    CHECK(tb_len(&t) == sizeof mem && i == sizeof mem - 15);
+
+    /* LF-only files stay that way */
+    tb_init(&t, mem, sizeof mem);
+    memcpy(mem, "a\nb", 3);
+    tb_load(&t, mem, 3, &crlf);
+    CHECK(!crlf && tb_lines(&t) == 2);
+}
+
 int main(void)
 {
     test_intersect();
@@ -181,6 +255,8 @@ int main(void)
     test_gm_paths();
     test_gm_command();
     test_gm_time();
+    test_paths();
+    test_textbuf();
     printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

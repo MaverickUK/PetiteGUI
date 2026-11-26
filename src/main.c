@@ -9,17 +9,21 @@
  *   PETITE /MEM       print what a swap would leave for a program, and quit
  *   PETITE /SHOT=n /DUMP=FILE.BIN
  *                     draw scene n (0 desktop, 1 File menu open, 2 alert, 3 games list,
- *                     4 the first game run from the list and back),
+ *                     4 the first game run from the list and back, 5 the editor,
+ *                     6 the right-click menu, 7 an edit saved),
  *                     write video memory to FILE.BIN and quit: tools/shot.sh makes a PNG
  *
  * The program polls: it reads the mouse and keyboard, and acts on presses. Anything that
  * changes redraws only the rectangle it changed, back to front. */
 #include <conio.h>
+#include <dos.h>
 #include <i86.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "app.h"
+#include "edit.h"
+#include "files.h"
 #include "games.h"
 #include "gfx.h"
 #include "launch.h"
@@ -33,7 +37,8 @@ App A;
 enum {
     CMD_NONE, CMD_ABOUT, CMD_OPEN, CMD_INFO, CMD_NEW_FOLDER, CMD_COPY, CMD_DELETE,
     CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK,
-    CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY
+    CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY,
+    CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP
 };
 
 static MenuItem system_items[] = {
@@ -41,14 +46,29 @@ static MenuItem system_items[] = {
 };
 static MenuItem file_items[] = {
     { "Open", "Ctrl+O", 0, CMD_OPEN },
+    { "Open as text", "Ctrl+E", 0, CMD_EDIT_FILE },
     { "Info...", "Ctrl+I", 0, CMD_INFO },
     { "", NULL, MI_SEP, 0 },
     { "New folder", "Ctrl+N", MI_OFF, CMD_NEW_FOLDER },
     { "Copy...", "Ctrl+C", MI_OFF, CMD_COPY },
     { "Delete...", "Del", 0, CMD_DELETE },
     { "", NULL, MI_SEP, 0 },
+    { "Save", "Ctrl+S", 0, CMD_SAVE },
     { "Close", "Ctrl+W", 0, CMD_CLOSE },
     { "Quit", "Ctrl+Q", 0, CMD_QUIT },
+};
+/* The right-click menus: on a file, and on a game. */
+static MenuItem file_context[] = {
+    { "Open", "Enter", 0, CMD_OPEN },
+    { "Open as text", "Ctrl+E", 0, CMD_EDIT_FILE },
+    { "Info...", "Ctrl+I", 0, CMD_INFO },
+    { "", NULL, MI_SEP, 0 },
+    { "Delete...", "Del", 0, CMD_DELETE },
+};
+static MenuItem game_context[] = {
+    { "Run", "Enter", 0, CMD_RUN },
+    { "Run setup", NULL, 0, CMD_RUN_SETUP },
+    { "Game info...", "Ctrl+I", 0, CMD_INFO },
 };
 static MenuItem view_items[] = {
     { "By name", NULL, MI_CHECK, CMD_BY_NAME },
@@ -69,32 +89,13 @@ static MenuItem options_items[] = {
 };
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #define FILE_MENU 1
-#define FILE_DELETE 5 /* its index in file_items */
+#define FILE_DELETE 6 /* its index in file_items */
 
 /* ---- Setting up ---- */
 
-static void add_row(Win *w, const char *name, long size, int dir)
-{
-    Row *r = &w->rows[w->nrows++];
+static Row rows_a[MAX_ROWS], rows_c[MAX_ROWS];
 
-    strncpy(r->name, name, sizeof r->name - 1);
-    r->name[sizeof r->name - 1] = '\0';
-    r->size = size;
-    r->dir = (uint8_t)dir;
-}
-
-static int compare_rows(const void *a, const void *b)
-{
-    const Row *x = (const Row *)a, *y = (const Row *)b;
-
-    if (x->dir != y->dir)
-        return x->dir ? -1 : 1;
-    if (A.sort_by_size && x->size != y->size)
-        return x->size > y->size ? -1 : 1;
-    return strcmp(x->name, y->name);
-}
-
-/* Sort every window, keeping each one's selected row selected. */
+/* Sort the directory windows, keeping each one's selected row selected. */
 static void sort_windows(void)
 {
     int i, k;
@@ -108,7 +109,7 @@ static void sort_windows(void)
         name[0] = '\0';
         if (w->sel >= 0)
             strcpy(name, w->rows[w->sel].name);
-        qsort(w->rows, w->nrows, sizeof(Row), compare_rows);
+        files_sort(w, A.sort_by_size);
         for (k = 0; k < w->nrows; k++)
             if (strcmp(w->rows[k].name, name) == 0)
                 w->sel = k;
@@ -117,54 +118,42 @@ static void sort_windows(void)
 
 static void app_init(void)
 {
-    Win *a = &A.win[0], *c = &A.win[1], *g = &A.win[GAMES_WIN];
+    Win *a = &A.win[0], *c = &A.win[1], *g = &A.win[GAMES_WIN], *e = &A.win[EDIT_WIN];
     static const char *const titles[NUM_MENUS] = { "System", "File", "View", "Games", "Options" };
     MenuItem *items[NUM_MENUS];
     int counts[NUM_MENUS], i, x = 16;
 
     memset(&A, 0, sizeof A);
+    /* A: starts closed, so a floppy drive isn't read until it's opened */
     a->r = rect_make(24, MENU_H + 14, 264, 100);
-    a->title = "A:\\";
-    a->free_kb = 291;
+    strcpy(a->path, "A:\\");
+    a->title = a->path;
+    a->rows = rows_a;
+    a->cap = MAX_ROWS;
     a->sel = -1;
-    add_row(a, "DRIVERS", 0, 1);
-    add_row(a, "INSTALL.EXE", 24576L, 0);
-    add_row(a, "SETUP.INI", 412, 0);
-    a->open = 1;
 
     c->r = rect_make(176, MENU_H + 30, 336, 122);
-    c->title = "C:\\";
-    c->free_kb = 18432L;
+    strcpy(c->path, "C:\\");
+    c->title = c->path;
+    c->rows = rows_c;
+    c->cap = MAX_ROWS;
     c->sel = -1;
-    add_row(c, "DOS", 0, 1);
-    add_row(c, "GAMES", 0, 1);
-    add_row(c, "SYNTH", 0, 1);
-    add_row(c, "UTILS", 0, 1);
-    add_row(c, "AUTOEXEC.BAT", 1024, 0);
-    add_row(c, "COMMAND.COM", 54645L, 0);
-    add_row(c, "CONFIG.SYS", 512, 0);
-    add_row(c, "IO.SYS", 40566L, 0);
-    add_row(c, "MOUSE.COM", 14336L, 0);
-    add_row(c, "MSDOS.SYS", 38138L, 0);
-    add_row(c, "README.TXT", 3210, 0);
-    add_row(c, "TREE.COM", 6383, 0);
-    c->sel = 10; /* README.TXT */
     c->open = 1;
+
     g->kind = WIN_GAMES;
     g->r = rect_make(40, MENU_H + 20, 432, 142);
     g->title = "Games";
     g->sel = -1;
-    A.z[0] = GAMES_WIN; /* closed until it's opened, then in front */
-    A.z[1] = 0;
-    A.z[2] = 1;
-    sort_windows();
-    {
-        WinParts p; /* start scrolled so the selected row shows */
 
-        window_parts(1, &p);
-        if (c->sel >= c->top + p.visible)
-            c->top = c->sel - p.visible + 1;
-    }
+    e->kind = WIN_EDIT;
+    e->r = rect_make(8, MENU_H + 12, 560, 172);
+    e->title = "";
+    e->sel = -1;
+
+    A.z[0] = EDIT_WIN; /* closed until they're opened, then in front */
+    A.z[1] = GAMES_WIN;
+    A.z[2] = 0;
+    A.z[3] = 1;
 
     A.icon[0].label = "A:";
     A.icon[0].kind = ICON_FLOPPY;
@@ -201,14 +190,27 @@ static void app_init(void)
         A.menu[i].x = x;
         x += gfx_text_w(titles[i]) + 16;
     }
+    A.menu[CONTEXT_MENU].title = "";
+    A.menu[CONTEXT_MENU].items = file_context;
+    A.menu[CONTEXT_MENU].n = COUNT(file_context);
     A.open_menu = A.hot = -1;
     strcpy(A.clock, "10:42");
+    files_load(c, 0);
 }
 
 /* Check marks and greyed items that follow the state. */
 static void update_menus(void)
 {
     int f = front_window(), game = f == GAMES_WIN && A.win[GAMES_WIN].sel >= 0;
+    const Win *w = f >= 0 ? &A.win[f] : NULL;
+    const Row *row = w != NULL && w->kind == WIN_FILES && w->sel >= 0 && w->sel < w->nrows ? &w->rows[w->sel] : NULL;
+    int file = row != NULL && !row->dir, up = row != NULL && strcmp(row->name, "..") == 0;
+
+    file_items[1].flags = file_context[1].flags = (uint8_t)(file ? 0 : MI_OFF);
+    file_items[6].flags = file_context[4].flags = (uint8_t)(file || f == GAMES_WIN ? 0 : MI_OFF);
+    file_context[2].flags = (uint8_t)(up ? MI_OFF : 0);
+    file_items[8].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
+    game_context[1].flags = (uint8_t)(game ? 0 : MI_OFF);
 
     games_items[2].flags = (uint8_t)(game ? 0 : MI_OFF);
     games_items[3].flags = (uint8_t)(game ? 0 : MI_OFF);
@@ -250,6 +252,27 @@ static void set_video_mode(int m)
 static unsigned long ticks(void)
 {
     return *(volatile unsigned long __far *)MK_FP(0x40, 0x6C); /* 18.2 a second */
+}
+
+/* DOS asks "Abort, Retry, Fail?" over the screen when a drive can't be read (A: with no
+ * disk). While the desktop is up, this answers Fail, and the window says the drive isn't
+ * ready. It's removed while a game runs: it points into PetiteGUI's memory. */
+static void (__interrupt __far *old_int24)(void);
+
+static void __interrupt __far on_critical_error(union INTPACK r)
+{
+    r.h.al = 3; /* fail the call */
+}
+
+static void critical_errors(int ours)
+{
+    if (ours && old_int24 == NULL) {
+        old_int24 = _dos_getvect(0x24);
+        _dos_setvect(0x24, on_critical_error);
+    } else if (!ours && old_int24 != NULL) {
+        _dos_setvect(0x24, old_int24);
+        old_int24 = NULL;
+    }
 }
 
 static void read_clock(char *out)
@@ -337,6 +360,7 @@ static void show_alert(const char *line1, const char *line2, const char *b0, con
     A.alert.button[1] = b1;
     A.alert.nbuttons = b0 == NULL ? 0 : (b1 ? 2 : 1);
     A.alert.cmd = cmd;
+    A.alert.cmd_alt = CMD_NONE;
     alert_layout();
     r = A.alert.r;
     r.w += SHADOW_X;
@@ -348,11 +372,21 @@ static void show_alert(const char *line1, const char *line2, const char *b0, con
     mouse_show();
 }
 
+/* An alert whose first button runs a command too: "Don't save" / "Save". */
+static void show_alert2(const char *line1, const char *line2, const char *b0, const char *b1,
+                        int cmd, int cmd_alt)
+{
+    show_alert(line1, line2, b0, b1, cmd);
+    A.alert.cmd_alt = cmd_alt;
+}
+
 static void run(int cmd);
 static void launch_selected(int setup, int checked);
+static void open_row(int i);
 
-/* Close the alert; ok runs its command. */
-static void close_alert(int ok)
+/* Close the alert: button is the one chosen, or -1 (Esc) for neither. The last button runs
+ * the alert's command, and the first of two its other one. */
+static void close_alert(int button)
 {
     Rect r = A.alert.r;
 
@@ -366,8 +400,10 @@ static void close_alert(int ok)
         draw_desktop(&r);
     A.alert_save = NULL;
     mouse_show();
-    if (ok)
+    if (button >= 0 && button == A.alert.nbuttons - 1)
         run(A.alert.cmd);
+    else if (button == 0 && A.alert.nbuttons == 2)
+        run(A.alert.cmd_alt);
 }
 
 /* ---- Windows ---- */
@@ -433,6 +469,11 @@ static void scroll_by(int i, int d)
     int top;
 
     window_parts(i, &p);
+    if (w->kind == WIN_EDIT) {
+        edit_scroll(d);
+        redraw_window(i);
+        return;
+    }
     top = w->top + d;
     if (top > w->nrows - p.visible)
         top = w->nrows - p.visible;
@@ -548,7 +589,7 @@ static void press_window(int i, int x, int y)
     if (rect_contains(&p.close, x, y)) {
         wait_release(&ux, &uy);
         if (rect_contains(&p.close, ux, uy))
-            close_window(i);
+            run(CMD_CLOSE); /* the editor asks to save first */
     } else if (rect_contains(&p.title, x, y)) {
         drag_window(i, x, y);
     } else if (rect_contains(&p.up, x, y)) {
@@ -557,6 +598,10 @@ static void press_window(int i, int x, int y)
         hold_arrow(i, 1);
     } else if (rect_contains(&p.track, x, y)) {
         scroll_by(i, y < p.track.y + p.track.h / 2 ? -p.visible : p.visible);
+        wait_release(&ux, &uy);
+    } else if (rect_contains(&p.list, x, y) && w->kind == WIN_EDIT) {
+        edit_click((y - p.list.y - 1) / ROW_H, (x - p.list.x - 4) / 8);
+        redraw_window(i);
         wait_release(&ux, &uy);
     } else if (rect_contains(&p.list, x, y)) {
         static unsigned long last_time;
@@ -576,7 +621,7 @@ static void press_window(int i, int x, int y)
                 if (w->kind == WIN_GAMES)
                     launch_selected(0, 0);
                 else
-                    run(CMD_INFO);
+                    open_row(i);
             }
         } else {
             wait_release(&ux, &uy);
@@ -612,10 +657,193 @@ static void open_icon(int i)
 {
     if (A.icon[i].win == GAMES_WIN)
         open_games();
-    else if (A.icon[i].win >= 0)
+    else if (A.icon[i].win >= 0) {
+        Win *w = &A.win[A.icon[i].win];
+
+        if (!w->open) {
+            files_load(w, A.sort_by_size);
+            w->sel = -1;
+            w->top = 0;
+        }
         open_window(A.icon[i].win);
+    }
     else
         show_alert("The trash is empty.", "", "OK", NULL, CMD_NONE);
+}
+
+/* ---- Directory windows ---- */
+
+/* Into a folder, or up with "..": the folder we came out of stays selected. */
+static void enter_dir(int i, const char *name)
+{
+    Win *w = &A.win[i];
+    char child[13];
+    int k;
+
+    child[0] = '\0';
+    if (strcmp(name, "..") == 0) {
+        if (!path_parent(w->path, child, sizeof child))
+            return;
+    } else {
+        if (strlen(w->path) + strlen(name) + 2 > sizeof w->path) {
+            show_alert("That folder is too deep", "for PetiteGUI to open.", "OK", NULL, CMD_NONE);
+            return;
+        }
+        strcat(w->path, name);
+        strcat(w->path, "\\");
+    }
+    files_load(w, A.sort_by_size);
+    w->sel = w->nrows > 0 ? 0 : -1;
+    w->top = 0;
+    for (k = 0; child[0] && k < w->nrows; k++)
+        if (strcmp(w->rows[k].name, child) == 0)
+            w->sel = k;
+    if (w->sel > 0)
+        select_row(i, w->sel); /* scrolls to it, and redraws */
+    else
+        redraw_window(i);
+}
+
+static void open_in_editor(const char *path);
+
+/* Open a row: a folder goes in, a text file into the editor, anything else shows its info. */
+static void open_row(int i)
+{
+    Win *w = &A.win[i];
+    char path[96];
+    const Row *row;
+
+    if (w->kind != WIN_FILES || w->sel < 0 || w->sel >= w->nrows)
+        return;
+    row = &w->rows[w->sel];
+    if (row->dir) {
+        enter_dir(i, row->name);
+    } else if (path_is_text(row->name)) {
+        sprintf(path, "%s%s", w->path, row->name);
+        open_in_editor(path);
+    } else {
+        run(CMD_INFO);
+    }
+}
+
+static void reload_dir(int i)
+{
+    Win *w = &A.win[i];
+    int sel = w->sel;
+
+    files_load(w, A.sort_by_size);
+    if (sel >= w->nrows)
+        sel = w->nrows - 1;
+    w->sel = sel;
+    if (w->top > 0 && w->top >= w->nrows)
+        w->top = 0;
+    redraw_window(i);
+}
+
+/* ---- The editor ---- */
+
+static void editor_view(void)
+{
+    WinParts p;
+
+    window_parts(EDIT_WIN, &p);
+    edit_set_view(p.visible, (p.list.w - 8) / 8);
+}
+
+static void open_in_editor(const char *path)
+{
+    char line[40];
+    int rc;
+
+    if (E.open && E.modified) {
+        sprintf(line, "Save %s first.", E.name);
+        show_alert(line, "It has changes not saved.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    if (E.open)
+        edit_close();
+    rc = edit_open(path);
+    if (rc != EDIT_OK) {
+        const char *slash = strrchr(path, '\\');
+
+        sprintf(line, "Can't open %.24s:", slash ? slash + 1 : path);
+        show_alert(line, rc == EDIT_TOO_BIG ? "it's over 60,000 bytes." :
+                         rc == EDIT_NO_MEMORY ? "there isn't enough memory." : "it couldn't be read.",
+                   "OK", NULL, CMD_NONE);
+        if (A.win[EDIT_WIN].open)
+            close_window(EDIT_WIN);
+        return;
+    }
+    A.win[EDIT_WIN].title = E.path;
+    editor_view();
+    if (A.win[EDIT_WIN].open) {
+        bring_to_front(EDIT_WIN);
+        redraw_window(EDIT_WIN);
+    } else {
+        open_window(EDIT_WIN);
+    }
+}
+
+static int save_editor(void)
+{
+    char line[40];
+    int i;
+
+    if (edit_save() != EDIT_OK) {
+        sprintf(line, "Couldn't save %s.", E.name);
+        show_alert(line, "Is the disk full or read-only?", "OK", NULL, CMD_NONE);
+        return 0;
+    }
+    redraw_window(EDIT_WIN);
+    for (i = 0; i < 2; i++) /* its size changed */
+        if (A.win[i].open)
+            reload_dir(i);
+    return 1;
+}
+
+static void close_editor(void)
+{
+    edit_close();
+    close_window(EDIT_WIN);
+}
+
+/* Ask before losing changes: "Don't save" runs cmd_discard, "Save" cmd_save, Esc neither. */
+static int ask_to_save(int cmd_save, int cmd_discard)
+{
+    char line[40];
+
+    if (!E.open || !E.modified)
+        return 0;
+    sprintf(line, "Save changes to %s?", E.name);
+    show_alert2(line, "", "Don't save", "Save", cmd_save, cmd_discard);
+    return 1;
+}
+
+/* A key for the editor: redraw only the rows that changed, unless the view moved. */
+static void editor_key(int ch, int ext)
+{
+    WinParts p;
+    unsigned top = E.top_line, left = E.left, lines = E.lines;
+    int old_row = (int)(E.cur_line - E.top_line), modified = E.modified, row, col;
+    Rect r;
+
+    if (edit_key(ch, ext) == EDIT_FULL) {
+        show_alert("The file can't grow any more.", "Save it, or remove some text.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    window_parts(EDIT_WIN, &p);
+    if (E.top_line != top || E.left != left || E.lines != lines || E.modified != modified) {
+        redraw_window(EDIT_WIN);
+        return;
+    }
+    r = rect_make(p.list.x, p.list.y + 1 + old_row * ROW_H, p.list.w, ROW_H);
+    redraw(&r);
+    edit_caret(&row, &col);
+    if (row != old_row) {
+        r.y = p.list.y + 1 + row * ROW_H;
+        redraw(&r);
+    }
+    redraw(&p.info);
 }
 
 /* ---- Games ---- */
@@ -658,7 +886,7 @@ static void scan_now(void)
     sprintf(blank, "%-28s", "");
     show_alert("Looking for games: 0 found", blank, NULL, NULL, CMD_NONE);
     n = games_scan(scan_progress);
-    close_alert(0);
+    close_alert(-1);
     games_window_reset();
     if (n < 0)
         show_alert("No memory for the games list.", "", "OK", NULL, CMD_NONE);
@@ -696,6 +924,8 @@ static unsigned run_game(const Game *g, const GameInfo *info, int setup)
     mouse_hide();
     mouse_shutdown();
     games_free(); /* its memory goes back to DOS for the game */
+    edit_suspend();
+    critical_errors(0);
     r.h.ah = 0;
     r.h.al = (unsigned char)old_video_mode;
     int86(0x10, &r, &r);
@@ -703,6 +933,17 @@ static unsigned run_game(const Game *g, const GameInfo *info, int setup)
 
     while (kbhit())
         getch();
+    critical_errors(1);
+    if (A.win[EDIT_WIN].open) {
+        if (edit_resume())
+            A.win[EDIT_WIN].title = E.path;
+        else
+            A.win[EDIT_WIN].open = 0;
+    }
+    if (A.win[0].open)
+        files_load(&A.win[0], A.sort_by_size); /* the game may have changed files */
+    if (A.win[1].open)
+        files_load(&A.win[1], A.sort_by_size);
     gfx_start(gfx_driver());
     mouse_init();
     if (!games_load_index())
@@ -724,6 +965,11 @@ static void launch_selected(int setup, int checked)
 
     if (w->sel < 0 || w->sel >= games_count())
         return;
+    if (E.open && E.modified) {
+        sprintf(line, "Save %s before", E.name);
+        show_alert(line, "running a game.", "OK", NULL, CMD_NONE);
+        return;
+    }
     games_get(w->sel, &g);
     if (!launch_read_info(g.dir, &info)) {
         show_alert(g.name, launch_error_text(LAUNCH_NO_INFO), "OK", NULL, CMD_NONE);
@@ -796,8 +1042,40 @@ static void run(int cmd)
     case CMD_OPEN:
         if (f == GAMES_WIN)
             launch_selected(0, 0);
+        else if (w != NULL && w->kind == WIN_FILES && w->sel >= 0)
+            open_row(f);
         else if (A.sel_icon >= 0)
             open_icon(A.sel_icon);
+        break;
+    case CMD_UP:
+        if (w != NULL && w->kind == WIN_FILES)
+            enter_dir(f, "..");
+        break;
+    case CMD_EDIT_FILE:
+        if (w != NULL && w->kind == WIN_FILES && w->sel >= 0 && !w->rows[w->sel].dir) {
+            char path[96];
+
+            sprintf(path, "%s%s", w->path, w->rows[w->sel].name);
+            open_in_editor(path);
+        }
+        break;
+    case CMD_SAVE:
+        if (E.open)
+            save_editor();
+        break;
+    case CMD_SAVE_CLOSE:
+        if (save_editor())
+            close_editor();
+        break;
+    case CMD_CLOSE_NOW:
+        close_editor();
+        break;
+    case CMD_SAVE_QUIT:
+        if (save_editor())
+            A.quit = 1;
+        break;
+    case CMD_QUIT_NOW:
+        A.quit = 1;
         break;
     case CMD_GAMES:
         open_games();
@@ -819,10 +1097,11 @@ static void run(int cmd)
     case CMD_INFO:
         if (f == GAMES_WIN)
             game_info();
-        else if (w == NULL || w->sel < 0) {
+        else if (w == NULL || w->kind != WIN_FILES || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
         } else if (w->rows[w->sel].dir) {
-            show_alert(w->rows[w->sel].name, "A folder.", "OK", NULL, CMD_NONE);
+            show_alert(w->rows[w->sel].name, strcmp(w->rows[w->sel].name, "..") == 0 ?
+                       "The folder above this one." : "A folder.", "OK", NULL, CMD_NONE);
         } else {
             fmt_thousands(w->rows[w->sel].size, size);
             sprintf(line, "%s bytes.", size);
@@ -832,30 +1111,41 @@ static void run(int cmd)
     case CMD_DELETE:
         if (f == GAMES_WIN) {
             show_alert("Remove games in GameMinder:", "it deletes their !GM_INFO.TXT.", "OK", NULL, CMD_NONE);
-        } else if (w == NULL || w->sel < 0) {
+        } else if (w == NULL || w->kind != WIN_FILES || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
+        } else if (w->rows[w->sel].dir) {
+            show_alert("Folders can't be deleted yet.", "", "OK", NULL, CMD_NONE);
         } else {
             sprintf(line, "Delete %s?", w->rows[w->sel].name);
             show_alert(line, "It can't be undone.", "Cancel", "Delete", CMD_DO_DELETE);
         }
         break;
-    case CMD_DO_DELETE: /* only from the list: nothing on disk is touched */
-        if (w != NULL && w->sel >= 0) {
-            memmove(&w->rows[w->sel], &w->rows[w->sel + 1], (w->nrows - w->sel - 1) * sizeof(Row));
-            w->nrows--;
-            if (w->sel >= w->nrows)
-                w->sel = w->nrows - 1;
-            if (w->top > 0 && w->top + 1 > w->nrows)
-                w->top--;
-            redraw_window(f);
+    case CMD_DO_DELETE:
+        if (w != NULL && w->kind == WIN_FILES && w->sel >= 0 && !w->rows[w->sel].dir) {
+            char path[96];
+
+            sprintf(path, "%s%s", w->path, w->rows[w->sel].name);
+            if (E.open && stricmp(path, E.path) == 0 && E.modified) {
+                show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
+            } else if (remove(path) != 0) {
+                sprintf(line, "Couldn't delete %s.", w->rows[w->sel].name);
+                show_alert(line, "Is it read-only?", "OK", NULL, CMD_NONE);
+            } else {
+                reload_dir(f);
+            }
         }
         break;
     case CMD_CLOSE:
-        if (f >= 0)
+        if (f == EDIT_WIN) {
+            if (!ask_to_save(CMD_SAVE_CLOSE, CMD_CLOSE_NOW))
+                close_editor();
+        } else if (f >= 0) {
             close_window(f);
+        }
         break;
     case CMD_QUIT:
-        A.quit = 1;
+        if (!ask_to_save(CMD_SAVE_QUIT, CMD_QUIT_NOW))
+            A.quit = 1;
         break;
     case CMD_BY_NAME:
     case CMD_BY_SIZE:
@@ -875,22 +1165,29 @@ static void run(int cmd)
 
 /* ---- Input ---- */
 
+static int rect_contains_menu(int x, int y)
+{
+    Rect r = menu_rect(A.open_menu);
+
+    return rect_contains(&r, x, y);
+}
+
 /* Follow the mouse along the menu bar and down the open menu while the button is held.
  * Returns once it's let go: on an item, that item runs; on a title, the menu stays open. */
-static void track_menu(void)
+static void track_menu(int button)
 {
     int x, y, b, t, item;
 
     for (;;) {
         mouse_read(&x, &y, &b);
-        t = menu_title_at(x, y);
+        t = A.open_menu == CONTEXT_MENU ? -1 : menu_title_at(x, y);
         if (t >= 0 && t != A.open_menu) {
             close_menu();
             open_menu(t);
         }
         item = menu_item_at(A.open_menu, x, y);
         set_hot(item);
-        if (!(b & 1))
+        if (!(b & button))
             break;
     }
     if (item >= 0) {
@@ -898,9 +1195,42 @@ static void track_menu(void)
 
         close_menu();
         run(cmd);
-    } else if (t < 0) {
-        close_menu();
+    } else if (t < 0 && !(A.open_menu == CONTEXT_MENU && rect_contains_menu(x, y))) {
+        close_menu(); /* a right-click menu stays open if the button is let go on it */
     }
+}
+
+/* Right-click on a file or a game: select it and show what can be done with it. */
+static void on_right_press(int x, int y)
+{
+    int i = window_at(x, y), k;
+    WinParts p;
+    Win *w;
+
+    if (A.alert_on)
+        return;
+    if (A.open_menu >= 0) {
+        close_menu();
+        return;
+    }
+    if (i < 0 || (A.win[i].kind != WIN_FILES && A.win[i].kind != WIN_GAMES))
+        return;
+    w = &A.win[i];
+    bring_to_front(i);
+    window_parts(i, &p);
+    if (!rect_contains(&p.list, x, y))
+        return;
+    k = w->top + (y - p.list.y - 1) / ROW_H;
+    if (k >= w->nrows)
+        return;
+    if (w->sel != k)
+        select_row(i, k);
+    A.menu[CONTEXT_MENU].items = w->kind == WIN_GAMES ? game_context : file_context;
+    A.menu[CONTEXT_MENU].n = w->kind == WIN_GAMES ? COUNT(game_context) : COUNT(file_context);
+    A.menu[CONTEXT_MENU].x = x;
+    A.menu[CONTEXT_MENU].y = y;
+    open_menu(CONTEXT_MENU);
+    track_menu(2);
 }
 
 static unsigned long last_click;
@@ -915,12 +1245,13 @@ static void on_press(int x, int y)
         i = alert_button_at(x, y);
         wait_release(&ux, &uy);
         if (i >= 0 && alert_button_at(ux, uy) == i)
-            close_alert(i == A.alert.nbuttons - 1);
+            close_alert(i);
         return;
     }
     if (A.open_menu >= 0) {
-        if (menu_item_at(A.open_menu, x, y) >= 0 || menu_title_at(x, y) >= 0) {
-            track_menu();
+        if (menu_item_at(A.open_menu, x, y) >= 0 ||
+            (A.open_menu != CONTEXT_MENU && menu_title_at(x, y) >= 0)) {
+            track_menu(1);
         } else {
             close_menu();
             wait_release(&ux, &uy);
@@ -930,7 +1261,7 @@ static void on_press(int x, int y)
     i = menu_title_at(x, y);
     if (i >= 0) {
         open_menu(i);
-        track_menu();
+        track_menu(1);
         return;
     }
     i = window_at(x, y);
@@ -964,9 +1295,9 @@ static void on_key(int ch)
 
     if (A.alert_on) {
         if (ch == 27)
-            close_alert(A.alert.nbuttons == 1);
+            close_alert(A.alert.nbuttons == 1 ? 0 : -1);
         else if (ch == 13)
-            close_alert(1);
+            close_alert(A.alert.nbuttons - 1);
         return;
     }
     if (A.open_menu >= 0) {
@@ -974,8 +1305,15 @@ static void on_key(int ch)
             close_menu();
         return;
     }
+    if (f == EDIT_WIN && E.open && ch != 7 && ch != 15 && ch != 17 && ch != 19 && ch != 23) {
+        editor_key(ch, ch == 0 ? getch() : 0);
+        return;
+    }
     switch (ch) {
-    case 13: if (f == GAMES_WIN) run(CMD_RUN); break; /* Enter */
+    case 13: run(f == GAMES_WIN ? CMD_RUN : CMD_OPEN); break; /* Enter */
+    case 8: run(CMD_UP); break;        /* Backspace */
+    case 5: run(CMD_EDIT_FILE); break; /* Ctrl+E */
+    case 19: run(CMD_SAVE); break;     /* Ctrl+S */
     case 7: run(CMD_GAMES); break;   /* Ctrl+G */
     case 15: run(CMD_OPEN); break;   /* Ctrl+O */
     case 9: run(CMD_INFO); break;    /* Ctrl+I */
@@ -995,6 +1333,16 @@ static void on_key(int ch)
 
 /* ---- Screenshots ---- */
 
+static int find_row(int i, const char *name)
+{
+    int k;
+
+    for (k = 0; k < A.win[i].nrows; k++)
+        if (stricmp(A.win[i].rows[k].name, name) == 0)
+            return k;
+    return 0;
+}
+
 static int shot(int scene, const char *path)
 {
     FILE *f;
@@ -1005,7 +1353,30 @@ static int shot(int scene, const char *path)
         open_menu(FILE_MENU);
         set_hot(FILE_DELETE);
     } else if (scene == 2) {
+        select_row(1, find_row(1, "PETITE.CFG"));
         run(CMD_DELETE);
+    } else if (scene == 5) { /* the editor */
+        open_in_editor("C:\\GAMES\\MEMTEST\\!GM_INFO.TXT");
+        editor_key(0, 80);
+        editor_key(0, 79);
+    } else if (scene == 6) { /* the right-click menu on a file */
+        WinParts p;
+        int k = find_row(1, "PETITE.CFG");
+
+        select_row(1, k);
+        window_parts(1, &p);
+        A.menu[CONTEXT_MENU].x = p.list.x + 120;
+        A.menu[CONTEXT_MENU].y = p.list.y + 2 + (k - A.win[1].top) * ROW_H + 4;
+        open_menu(CONTEXT_MENU);
+        set_hot(1);
+    } else if (scene == 7) { /* type a line into C:\\OUT\\EDIT.TXT and save it (tools/dostest.sh) */
+        open_in_editor("C:\\OUT\\EDIT.TXT");
+        editor_key('H', 0);
+        editor_key('i', 0);
+        editor_key(13, 0);
+        editor_key(0, 117); /* Ctrl+End */
+        editor_key('!', 0);
+        run(CMD_SAVE);
     } else if (scene == 3) {
         open_games();
     } else if (scene == 4) { /* run the first game from the list, then come back (tools/dostest.sh) */
@@ -1162,6 +1533,7 @@ int main(int argc, char **argv)
         return 1;
     }
     read_clock(A.clock);
+    critical_errors(1);
     draw_desktop(&FULL);
     mouse_show();
 
@@ -1169,6 +1541,9 @@ int main(int argc, char **argv)
         mouse_read(&x, &y, &b);
         if ((b & 1) && !(prev & 1)) {
             on_press(x, y);
+            mouse_read(&x, &y, &b);
+        } else if ((b & 2) && !(prev & 2)) {
+            on_right_press(x, y);
             mouse_read(&x, &y, &b);
         } else if (A.open_menu >= 0) {
             set_hot(menu_item_at(A.open_menu, x, y));
@@ -1191,6 +1566,8 @@ int main(int argc, char **argv)
     }
 
     mouse_hide();
+    critical_errors(0);
+    edit_close();
     set_video_mode(old_mode);
     return 0;
 }

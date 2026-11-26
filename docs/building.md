@@ -14,7 +14,7 @@ Back to the [README](../README.md).
 ```sh
 make                # build/PETITE.EXE
 make test           # host unit tests (rectangles, number formatting), with ASan/UBSan
-make shots          # build/shots/{paper,ink}{0,1,2,3}.png, through DOSBox-X with no window
+make shots          # build/shots/{paper,ink}{0,1,2,3,5,6}.png, through DOSBox-X with no window
 make dostest        # end-to-end tests in DOSBox-X: scanning, swapping, running games
 tools/run.sh        # try it: Paper on an emulated CGA at about PC/XT speed
 tools/run.sh ink    # Ink on an emulated EGA
@@ -28,13 +28,15 @@ CYCLES=max tools/run.sh   # flat out
 - a game run from PetiteGUI, swapped to EMS and then to a file, gets within 4 KB of the memory it gets run straight from DOS, with its arguments;
 - a batch game runs with its `before:` and `after:`;
 - `!GM_LOG.TXT` gets GameMinder's lines;
-- a missing program is reported, and no swap or batch file is left behind.
+- a missing program is reported, and no swap or batch file is left behind;
+- after a game run from the Games window, the desktop is back;
+- the editor saves a typed line into a CR LF file, keeping CR LF, and leaves no temporary file.
 
 `KEEP=1 tools/dostest.sh` keeps the DOS drive it made, to look at.
 
 ## Screenshots
 
-`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
+`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu; 4 and 7 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
 
 ## CI
 
