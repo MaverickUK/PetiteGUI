@@ -14,7 +14,8 @@
  *                     draw scene n (0 desktop, 1 File menu open, 2 alert, 3 games list,
  *                     4 the first game run from the list and back, 5 the editor,
  *                     6 the right-click menu, 7 an edit saved, 8 windows resized and zoomed,
- *                     9 the About box, 10 a command run, 11 a batch file opened, 12 Run...),
+ *                     9 the About box, 10 a command run, 11 a batch file opened, 12 Run...,
+ *                     13 file operations, 14 deleting a folder),
  *   PETITE /DRIVES    list the drives found, and quit
  *                     write video memory to FILE.BIN and quit: tools/shot.sh makes a PNG
  *
@@ -30,6 +31,7 @@
 #include "drives.h"
 #include "edit.h"
 #include "files.h"
+#include "fileops.h"
 #include "gamecols.h"
 #include "games.h"
 #include "gfx.h"
@@ -47,7 +49,7 @@ enum {
     CMD_DO_DELETE, CMD_CLOSE, CMD_QUIT, CMD_BY_NAME, CMD_BY_SIZE, CMD_PAPER, CMD_INK,
     CMD_GAMES, CMD_RUN, CMD_RUN_SETUP, CMD_RESCAN, CMD_RUN_ANYWAY,
     CMD_EDIT_FILE, CMD_SAVE, CMD_SAVE_CLOSE, CMD_CLOSE_NOW, CMD_SAVE_QUIT, CMD_QUIT_NOW, CMD_UP,
-    CMD_SAVER_NOW, CMD_RUN_DIALOG, CMD_DOS_PROMPT
+    CMD_SAVER_NOW, CMD_RUN_DIALOG, CMD_DOS_PROMPT, CMD_RENAME, CMD_MOVE
 };
 #define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
 #define CMD_SAVER_DELAY 400 /* + minutes */
@@ -57,8 +59,8 @@ static MenuItem system_items[] = {
     { "About PetiteGUI...", NULL, 0, CMD_ABOUT },
 };
 enum { /* file_items' places */
-    FI_OPEN, FI_OPEN_TEXT, FI_RUN, FI_PROMPT, FI_INFO, FI_SEP1, FI_NEW_FOLDER, FI_COPY, FI_DELETE,
-    FI_SEP2, FI_SAVE, FI_CLOSE, FI_QUIT
+    FI_OPEN, FI_OPEN_TEXT, FI_RUN, FI_PROMPT, FI_INFO, FI_SEP1, FI_NEW_FOLDER, FI_RENAME, FI_COPY,
+    FI_MOVE, FI_DELETE, FI_SEP2, FI_SAVE, FI_CLOSE, FI_QUIT
 };
 static MenuItem file_items[] = {
     { "Open", "Ctrl+O", 0, CMD_OPEN },
@@ -67,8 +69,10 @@ static MenuItem file_items[] = {
     { "DOS prompt", "Ctrl+D", 0, CMD_DOS_PROMPT },
     { "Info...", "Ctrl+I", 0, CMD_INFO },
     { "", NULL, MI_SEP, 0 },
-    { "New folder", "Ctrl+N", MI_OFF, CMD_NEW_FOLDER },
-    { "Copy...", "Ctrl+C", MI_OFF, CMD_COPY },
+    { "New folder...", "F7", 0, CMD_NEW_FOLDER },
+    { "Rename...", "F2", 0, CMD_RENAME },
+    { "Copy...", "F5", 0, CMD_COPY },
+    { "Move...", "F6", 0, CMD_MOVE },
     { "Delete...", "Del", 0, CMD_DELETE },
     { "", NULL, MI_SEP, 0 },
     { "Save", "Ctrl+S", 0, CMD_SAVE },
@@ -76,13 +80,16 @@ static MenuItem file_items[] = {
     { "Quit", "Ctrl+Q", 0, CMD_QUIT },
 };
 /* The right-click menus: on a file, and on a game. */
-enum { FC_OPEN, FC_OPEN_TEXT, FC_RUN, FC_INFO, FC_SEP, FC_DELETE };
+enum { FC_OPEN, FC_OPEN_TEXT, FC_RUN, FC_INFO, FC_SEP, FC_RENAME, FC_COPY, FC_MOVE, FC_DELETE };
 static MenuItem file_context[] = {
     { "Open", "Enter", 0, CMD_OPEN },
     { "Open as text", "Ctrl+E", 0, CMD_EDIT_FILE },
     { "Run...", "Ctrl+R", 0, CMD_RUN_DIALOG },
     { "Info...", "Ctrl+I", 0, CMD_INFO },
     { "", NULL, MI_SEP, 0 },
+    { "Rename...", "F2", 0, CMD_RENAME },
+    { "Copy...", "F5", 0, CMD_COPY },
+    { "Move...", "F6", 0, CMD_MOVE },
     { "Delete...", "Del", 0, CMD_DELETE },
 };
 static MenuItem game_context[] = {
@@ -290,7 +297,16 @@ static void update_menus(void)
     int file = row != NULL && !row->dir, up = row != NULL && strcmp(row->name, "..") == 0;
 
     file_items[FI_OPEN_TEXT].flags = file_context[FC_OPEN_TEXT].flags = (uint8_t)(file ? 0 : MI_OFF);
-    file_items[FI_DELETE].flags = file_context[FC_DELETE].flags = (uint8_t)(file || f == GAMES_WIN ? 0 : MI_OFF);
+    {
+        uint8_t item = (uint8_t)(row != NULL && !up ? 0 : MI_OFF); /* a file or folder, not ".." */
+        uint8_t here = (uint8_t)(w != NULL && w->kind == WIN_FILES && !w->not_ready ? 0 : MI_OFF);
+
+        file_items[FI_RENAME].flags = file_context[FC_RENAME].flags = item;
+        file_items[FI_COPY].flags = file_context[FC_COPY].flags = item;
+        file_items[FI_MOVE].flags = file_context[FC_MOVE].flags = item;
+        file_items[FI_DELETE].flags = file_context[FC_DELETE].flags = (uint8_t)(f == GAMES_WIN ? 0 : item);
+        file_items[FI_NEW_FOLDER].flags = here;
+    }
     file_context[FC_INFO].flags = (uint8_t)(up ? MI_OFF : 0);
     file_context[FC_RUN].flags = (uint8_t)(file && path_is_program(row->name) ? 0 : MI_OFF);
     file_items[FI_SAVE].flags = (uint8_t)(f == EDIT_WIN && E.modified ? 0 : MI_OFF);
@@ -488,6 +504,7 @@ static void run(int cmd);
 static void launch_selected(int setup, int checked);
 static void open_row(int i);
 static void sort_games(int col);
+static int drag_item(int i, int k, int mx, int my);
 
 /* Close the alert: button is the one chosen, or -1 (Esc) for neither. The last button runs
  * the alert's command, and the first of two its other one. */
@@ -818,6 +835,10 @@ static void press_window(int i, int x, int y)
             int twice = i == last_win && k == last_row && ticks() - last_time < 9;
 
             select_row(i, k);
+            if (w->kind == WIN_FILES && drag_item(i, k, x, y)) {
+                last_win = -1;
+                return;
+            }
             wait_release(&ux, &uy);
             last_win = i;
             last_row = k;
@@ -973,6 +994,356 @@ static void reload_dir(int i)
     if (w->top > 0 && w->top >= w->nrows)
         w->top = 0;
     redraw_window(i);
+}
+
+/* ---- File operations ---- */
+
+static int ask_choice(const char *line1, const char *line2, const char *no, const char *yes);
+static int ask_text(const char *prompt, char *text, int size);
+
+/* The selected row's full path in folder window i ("C:\GAMES\DOOM"); zero if there isn't
+ * one, or it's "..". */
+static int selected_path(int i, char *out, int size)
+{
+    const Win *w = &A.win[i];
+
+    if (i < 0 || i >= DIR_WINS || w->sel < 0 || w->sel >= w->nrows || strcmp(w->rows[w->sel].name, "..") == 0)
+        return 0;
+    return path_join(out, size, w->path, w->rows[w->sel].name);
+}
+
+static const char *base_name(const char *path)
+{
+    const char *s = strrchr(path, '\\');
+
+    return s != NULL ? s + 1 : path;
+}
+
+/* Read every open folder window again, keeping each one's selection by name. */
+static void reload_dirs(void)
+{
+    char name[13];
+    int i, k;
+
+    for (i = 0; i < DIR_WINS; i++) {
+        Win *w = &A.win[i];
+
+        if (!w->open)
+            continue;
+        name[0] = '\0';
+        if (w->sel >= 0 && w->sel < w->nrows)
+            strcpy(name, w->rows[w->sel].name);
+        files_load(w, A.sort_by_size);
+        w->sel = w->nrows > 0 ? 0 : -1;
+        for (k = 0; name[0] && k < w->nrows; k++)
+            if (stricmp(w->rows[k].name, name) == 0)
+                w->sel = k;
+        if (w->top > w->nrows - 1)
+            w->top = 0;
+        redraw_window(i);
+    }
+}
+
+/* Select a name in folder window i, scrolling to it. */
+static void select_name(int i, const char *name)
+{
+    int k;
+
+    for (k = 0; k < A.win[i].nrows; k++)
+        if (stricmp(A.win[i].rows[k].name, name) == 0) {
+            select_row(i, k);
+            return;
+        }
+}
+
+/* The progress box: an alert with no buttons, its lines changed as each file goes. */
+static long progress_total;
+static const char *progress_verb;
+
+static int show_progress(const char *name, long done)
+{
+    char line[40];
+    size_t n = strlen(name);
+
+    if (kbhit() && getch() == 27)
+        return 0;
+    sprintf(line, "%s %ld of %ld file%s...", progress_verb, done + 1, progress_total, progress_total == 1 ? "" : "s");
+    sprintf(A.alert.line1, "%-30s", line);
+    if (n > 30)
+        sprintf(line, "...%s", name + n - 27);
+    else
+        strcpy(line, name);
+    sprintf(A.alert.line2, "%-30s", line);
+    mouse_hide();
+    draw_alert();
+    mouse_show();
+    return 1;
+}
+
+static void progress_open(const char *verb, const char *src)
+{
+    long files = 0, bytes = 0;
+    char blank[32];
+
+    fo_count(src, &files, &bytes);
+    progress_total = files > 0 ? files : 1;
+    progress_verb = verb;
+    sprintf(blank, "%-30s", "");
+    show_alert(blank, blank, NULL, NULL, CMD_NONE);
+}
+
+/* If the editor has a file that's moved or gone, follow it or close. */
+static void editor_follow(const char *from, const char *to)
+{
+    if (!E.open || stricmp(E.path, from) != 0)
+        return;
+    if (to != NULL) {
+        strncpy(E.path, to, sizeof E.path - 1);
+        strncpy(E.name, base_name(to), sizeof E.name - 1);
+        A.win[EDIT_WIN].title = E.path;
+        redraw_window(EDIT_WIN);
+    } else if (!E.modified) {
+        edit_close();
+        close_window(EDIT_WIN);
+    }
+}
+
+/* Copy or move src to dst (full paths), asking before replacing, showing progress. */
+static void transfer(const char *src, const char *dst, int move)
+{
+    char line[48];
+    int rc, replace = 0;
+
+    if (stricmp(src, dst) == 0)
+        return;
+    if (move && E.open && E.modified && path_inside(E.path, src)) {
+        show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    if (fo_exists(dst)) {
+        sprintf(line, "There's a %.13s there already.", base_name(dst));
+        if (!ask_choice(line, fo_is_dir(dst) ? "Copy into it?" : "Replace it?", "Cancel", "Replace"))
+            return;
+        replace = 1;
+    }
+    progress_open(move ? "Moving" : "Copying", src);
+    rc = move ? fo_move(src, dst, replace, show_progress) : fo_copy(src, dst, replace, show_progress);
+    close_alert(-1);
+    if (move && rc == FO_OK)
+        editor_follow(src, dst);
+    reload_dirs();
+    if (rc != FO_OK) {
+        sprintf(line, "Couldn't %s %.13s:", move ? "move" : "copy", base_name(src));
+        show_alert(line, fo_error_text(rc), "OK", NULL, CMD_NONE);
+    }
+}
+
+/* Where Copy... and Move... suggest: the folder in the next window back, else the same one. */
+static const char *other_dir(int from)
+{
+    int k;
+
+    for (k = NUM_WINS - 1; k >= 0; k--) {
+        int i = A.z[k];
+
+        if (i < DIR_WINS && i != from && A.win[i].open && !A.win[i].not_ready)
+            return A.win[i].path;
+    }
+    return A.win[from].path;
+}
+
+/* Copy... or Move...: ask where, then go. A folder that exists means into it; anything else
+ * is the new path (a bare name, in the same folder). */
+static void copy_or_move(int move)
+{
+    int f = front_window();
+    char src[96], dest[FIELD_MAX + 1], dst[96], prompt[48];
+    size_t n;
+
+    if (!selected_path(f, src, sizeof src))
+        return;
+    strcpy(dest, other_dir(f));
+    sprintf(prompt, "%s %.13s to:", move ? "Move" : "Copy", base_name(src));
+    if (!ask_text(prompt, dest, sizeof dest) || dest[0] == '\0')
+        return;
+    n = strlen(dest);
+    if (strchr(dest, ':') == NULL && dest[0] != '\\') { /* a bare name: in the same folder */
+        char rel[FIELD_MAX + 1];
+
+        strcpy(rel, dest);
+        if (!path_join(dest, sizeof dest, A.win[f].path, rel))
+            return;
+        n = strlen(dest);
+    }
+    if (dest[n - 1] == '\\' || fo_is_dir(dest)) {
+        if (dest[n - 1] != '\\' && n + 1 < sizeof dest)
+            strcat(dest, "\\");
+        if (!path_join(dst, sizeof dst, dest, base_name(src)))
+            return;
+    } else {
+        if (!path_valid_name(base_name(dest))) {
+            show_alert("That isn't a name DOS takes:", "8 characters, a dot, then 3.", "OK", NULL, CMD_NONE);
+            return;
+        }
+        strncpy(dst, dest, sizeof dst - 1);
+        dst[sizeof dst - 1] = '\0';
+    }
+    transfer(src, dst, move);
+}
+
+static void rename_item(void)
+{
+    int f = front_window();
+    char src[96], name[FIELD_MAX + 1], dst[96], prompt[48];
+    int rc;
+
+    if (!selected_path(f, src, sizeof src))
+        return;
+    strcpy(name, base_name(src));
+    sprintf(prompt, "Rename %.13s to:", name);
+    if (!ask_text(prompt, name, sizeof name) || name[0] == '\0' || stricmp(name, base_name(src)) == 0)
+        return;
+    if (!path_valid_name(name)) {
+        show_alert("That isn't a name DOS takes:", "8 characters, a dot, then 3.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    path_join(dst, sizeof dst, A.win[f].path, name);
+    rc = fo_rename(src, dst);
+    if (rc != FO_OK) {
+        show_alert("Couldn't rename it:", fo_error_text(rc), "OK", NULL, CMD_NONE);
+        return;
+    }
+    editor_follow(src, dst);
+    reload_dirs();
+    select_name(f, name);
+}
+
+static void new_folder(void)
+{
+    int f = front_window();
+    char name[FIELD_MAX + 1], dst[96], prompt[48];
+    int rc;
+
+    if (f < 0 || f >= DIR_WINS || A.win[f].not_ready)
+        return;
+    name[0] = '\0';
+    if (strlen(A.win[f].path) > 26)
+        sprintf(prompt, "New folder in ...%s:", A.win[f].path + strlen(A.win[f].path) - 23);
+    else
+        sprintf(prompt, "New folder in %s:", A.win[f].path);
+    if (!ask_text(prompt, name, sizeof name) || name[0] == '\0')
+        return;
+    if (!path_valid_name(name) || !path_join(dst, sizeof dst, A.win[f].path, name)) {
+        show_alert("That isn't a name DOS takes:", "8 characters, a dot, then 3.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    rc = fo_mkdir(dst);
+    if (rc != FO_OK) {
+        show_alert("Couldn't make the folder:", fo_error_text(rc), "OK", NULL, CMD_NONE);
+        return;
+    }
+    reload_dirs();
+    select_name(f, name);
+}
+
+/* Delete what's selected, once it's been confirmed (CMD_DELETE asks). */
+static void delete_selected(int f)
+{
+    char path[96], line[48];
+    int rc;
+
+    if (!selected_path(f, path, sizeof path))
+        return;
+    if (E.open && path_inside(E.path, path) && E.modified) {
+        show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
+        return;
+    }
+    progress_open("Deleting", path);
+    rc = fo_delete(path, show_progress);
+    close_alert(-1);
+    if (E.open && path_inside(E.path, path))
+        editor_follow(E.path, NULL);
+    reload_dirs();
+    if (rc != FO_OK) {
+        sprintf(line, "Couldn't delete %.13s:", base_name(path));
+        show_alert(line, fo_error_text(rc), "OK", NULL, CMD_NONE);
+    }
+}
+
+/* Is the Ctrl key down? (The BIOS keeps the shift keys at 0040:0017; Ctrl is bit 2.) */
+static int ctrl_down(void)
+{
+    return (*(volatile unsigned char __far *)MK_FP(0x40, 0x17) & 4) != 0;
+}
+
+/* Drag a file or folder from window i's row k: an outline follows the pointer; let go on
+ * another folder window (or a folder in one) or a drive's icon to move it there (the same
+ * drive) or copy it (another drive, or with Ctrl). Returns zero if the pointer never left
+ * the row, so it was just a click. */
+static int drag_item(int i, int k, int mx, int my)
+{
+    Win *w = &A.win[i];
+    char src[96], dir[96], dst[96], child[13];
+    Rect box, next;
+    int x, y, b, t, n, dragging = 0;
+    WinParts p;
+
+    if (!selected_path(i, src, sizeof src))
+        return 0;
+    box = rect_make(mx - 40, my - 4, 80, 9);
+    for (;;) {
+        mouse_read(&x, &y, &b);
+        if (!dragging && (abs(x - mx) > 6 || abs(y - my) > 3)) {
+            dragging = 1;
+            mouse_hide();
+            gfx_xor_frame(&box);
+            mouse_show();
+        }
+        if (dragging) {
+            next = rect_make(x - 40, y - 4, 80, 9);
+            if (next.x != box.x || next.y != box.y) {
+                mouse_hide();
+                gfx_xor_frame(&box);
+                gfx_xor_frame(&next);
+                mouse_show();
+                box = next;
+            }
+        }
+        if (!(b & 1))
+            break;
+    }
+    if (!dragging)
+        return 0;
+    mouse_hide();
+    gfx_xor_frame(&box);
+    mouse_show();
+
+    dir[0] = '\0';
+    t = window_at(x, y);
+    if (t >= 0 && t < DIR_WINS && !A.win[t].not_ready) {
+        strcpy(dir, A.win[t].path);
+        window_parts(t, &p);
+        n = A.win[t].top + (y - p.list.y - 1) / ROW_H;
+        if (rect_contains(&p.list, x, y) && n < A.win[t].nrows && A.win[t].rows[n].dir &&
+            !(t == i && n == k)) { /* onto a folder in it */
+            strcpy(child, A.win[t].rows[n].name);
+            if (strcmp(child, "..") == 0)
+                path_parent(dir, NULL, 0);
+            else if (strlen(dir) + strlen(child) + 2 < sizeof dir)
+                strcat(strcat(dir, child), "\\");
+        }
+    } else if (t < 0) {
+        for (n = 0; n < A.nicons; n++) {
+            Rect ib = icon_bounds(n);
+
+            if (A.icon[n].drive && rect_contains(&ib, x, y))
+                sprintf(dir, "%c:\\", A.icon[n].drive);
+        }
+    }
+    if (dir[0] == '\0' || stricmp(dir, w->path) == 0 || !path_join(dst, sizeof dst, dir, base_name(src)))
+        return 1;
+    transfer(src, dst, path_same_drive(src, dst) && !ctrl_down());
+    return 1;
 }
 
 /* ---- The editor ---- */
@@ -1400,6 +1771,36 @@ static int ask_text(const char *prompt, char *text, int size)
     return result == 1;
 }
 
+/* An alert that waits for its answer: 1 for yes (the last button, or Enter), 0 for no (the
+ * first, or Esc). */
+static int ask_choice(const char *line1, const char *line2, const char *no, const char *yes)
+{
+    int x, y, b, prev = 1, ch, i, ux, uy, result = -1;
+
+    show_alert(line1, line2, no, yes, CMD_NONE);
+    while (result < 0) {
+        if (kbhit()) {
+            ch = getch();
+            if (ch == 0)
+                getch();
+            else if (ch == 13)
+                result = 1;
+            else if (ch == 27)
+                result = 0;
+        }
+        mouse_read(&x, &y, &b);
+        if ((b & 1) && !(prev & 1)) {
+            i = alert_button_at(x, y);
+            wait_release(&ux, &uy);
+            if (i >= 0 && alert_button_at(ux, uy) == i)
+                result = i;
+        }
+        prev = b;
+    }
+    close_alert(-1);
+    return result == 1;
+}
+
 /* File > Run...: a command line, filled in with the selected program, run in the folder
  * through COMMAND.COM (so the PATH and DOS's own commands work), its output kept on the
  * screen until a key. */
@@ -1622,27 +2023,41 @@ static void run(int cmd)
             show_alert("Remove games in GameMinder:", "it deletes their !GM_INFO.TXT.", "OK", NULL, CMD_NONE);
         } else if (w == NULL || w->kind != WIN_FILES || w->sel < 0) {
             show_alert("Select a file first.", "", "OK", NULL, CMD_NONE);
+        } else if (strcmp(w->rows[w->sel].name, "..") == 0) {
+            break;
         } else if (w->rows[w->sel].dir) {
-            show_alert("Folders can't be deleted yet.", "", "OK", NULL, CMD_NONE);
+            char path[96], what[32];
+            long files = 0, bytes = 0;
+
+            path_join(path, sizeof path, w->path, w->rows[w->sel].name);
+            fo_count(path, &files, &bytes);
+            if (files == 0) {
+                sprintf(line, "Delete the empty folder %s?", w->rows[w->sel].name);
+                strcpy(what, "");
+            } else {
+                sprintf(line, "Delete %s and its %ld file%s?", w->rows[w->sel].name, files, files == 1 ? "" : "s");
+                strcpy(what, "They can't be got back.");
+            }
+            show_alert(line, what[0] ? what : "It can't be undone.", "Cancel", "Delete", CMD_DO_DELETE);
         } else {
             sprintf(line, "Delete %s?", w->rows[w->sel].name);
             show_alert(line, "It can't be undone.", "Cancel", "Delete", CMD_DO_DELETE);
         }
         break;
     case CMD_DO_DELETE:
-        if (w != NULL && w->kind == WIN_FILES && w->sel >= 0 && !w->rows[w->sel].dir) {
-            char path[96];
-
-            sprintf(path, "%s%s", w->path, w->rows[w->sel].name);
-            if (E.open && stricmp(path, E.path) == 0 && E.modified) {
-                show_alert("It's open with changes.", "Save or close it first.", "OK", NULL, CMD_NONE);
-            } else if (remove(path) != 0) {
-                sprintf(line, "Couldn't delete %s.", w->rows[w->sel].name);
-                show_alert(line, "Is it read-only?", "OK", NULL, CMD_NONE);
-            } else {
-                reload_dir(f);
-            }
-        }
+        delete_selected(f);
+        break;
+    case CMD_NEW_FOLDER:
+        new_folder();
+        break;
+    case CMD_RENAME:
+        rename_item();
+        break;
+    case CMD_COPY:
+        copy_or_move(0);
+        break;
+    case CMD_MOVE:
+        copy_or_move(1);
         break;
     case CMD_CLOSE:
         if (f == EDIT_WIN) {
@@ -1832,8 +2247,16 @@ static void on_key(int ch)
     case 17: run(CMD_QUIT); break;   /* Ctrl+Q */
     case 0:
         ch = getch(); /* an extended key */
-        if (ch == 83)
+        if (ch == 83 || ch == 66) /* Delete, F8 */
             run(CMD_DELETE);
+        else if (ch == 60) /* F2 */
+            run(CMD_RENAME);
+        else if (ch == 63) /* F5 */
+            run(CMD_COPY);
+        else if (ch == 64) /* F6 */
+            run(CMD_MOVE);
+        else if (ch == 65) /* F7 */
+            run(CMD_NEW_FOLDER);
         else if (f >= 0 && ch == 72)
             select_row(f, A.win[f].sel - 1);
         else if (f >= 0 && ch == 80)
@@ -1843,6 +2266,13 @@ static void on_key(int ch)
 }
 
 /* ---- Screenshots ---- */
+
+static int show_progress_quiet(const char *name, long done)
+{
+    (void)name;
+    (void)done;
+    return 1;
+}
 
 static int find_row(int i, const char *name)
 {
@@ -1905,6 +2335,30 @@ static int shot(int scene, const char *path)
     } else if (scene == 12) { /* the Run... box */
         show_input("Run a command in C:\\GAMES\\:", "PKUNZIP DOOM.ZIP");
         draw_input();
+    } else if (scene == 13) { /* file operations, their results to C:\\OUT\\FILEOPS.TXT (tools/dostest.sh) */
+        FILE *out = fopen("C:\\OUT\\FILEOPS.TXT", "w");
+        int rc[12], n = 0, k;
+
+        rc[n++] = fo_copy("C:\\GAMES\\MEMTEST", "D:\\MEMTEST", 0, show_progress_quiet);
+        rc[n++] = fo_copy("C:\\GAMES\\BATCH\\GO.BAT", "C:\\OUT\\GOCOPY.BAT", 0, NULL);
+        rc[n++] = fo_mkdir("C:\\OUT\\NEWDIR");
+        rc[n++] = fo_move("C:\\OUT\\GOCOPY.BAT", "C:\\OUT\\NEWDIR\\GOMOVED.BAT", 0, NULL);
+        rc[n++] = fo_move("C:\\OUT\\NEWDIR", "C:\\OUT\\MOVEDDIR", 0, NULL);
+        rc[n++] = fo_move("D:\\MEMTEST", "C:\\OUT\\MEMBACK", 0, NULL);
+        rc[n++] = fo_copy("C:\\GAMES", "C:\\GAMES\\INSIDE", 0, NULL);
+        rc[n++] = fo_copy("C:\\GAMES\\BATCH\\GO.BAT", "C:\\OUT\\MOVEDDIR\\GOMOVED.BAT", 0, NULL);
+        rc[n++] = fo_rename("C:\\OUT\\MOVEDDIR\\GOMOVED.BAT", "C:\\OUT\\MOVEDDIR\\RENAMED.BAT");
+        rc[n++] = fo_copy("C:\\OUT\\MEMBACK", "C:\\OUT\\DELME", 0, NULL);
+        rc[n++] = fo_delete("C:\\OUT\\DELME", NULL);
+        if (out != NULL) {
+            for (k = 0; k < n; k++)
+                fprintf(out, "%d ", rc[k]);
+            fprintf(out, "\n");
+            fclose(out);
+        }
+    } else if (scene == 14) { /* deleting a folder asks first, saying how much is in it */
+        select_row(1, find_row(1, "GAMES"));
+        run(CMD_DELETE);
     } else if (scene == 9) { /* System > About */
         run(CMD_ABOUT);
     } else if (scene == 3) {

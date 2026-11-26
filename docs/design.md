@@ -16,6 +16,7 @@ gminfo.c   GameMinder's formats and launch rules, pure C (host tested)
 swap.c     EMS or the swap file, then swapcore.asm, which runs the game (or any program)
 drives.c   the drives DOS has
 field.c    the text-entry box's editing, pure C (host tested)
+fileops.c  copying, moving, renaming and deleting files and folders
 files.c    a directory window's listing (findfirst/findnext)
 edit.c     the text editor: opening, saving, keys, the view
 textbuf.c  its gap buffer, pure C (host tested)
@@ -91,6 +92,17 @@ There are four folder windows. A drive's icon brings up the window already showi
 Games, programs double-clicked in a folder, Run… and the DOS prompt all go the same way: `leave_desktop` hands back every DOS block PetiteGUI holds outside its own (the games list, the editor's text), takes out its critical-error handler, resets the mouse and returns to text mode; `launch.c` runs the program with PetiteGUI swapped out; `return_desktop` puts it all back, reads the open folders again and redraws. Nothing runs while the editor has unsaved changes, since its text comes back from the disk.
 
 An EXE or COM is run directly. A batch file, Run…'s command line and the DOS prompt go through `COMMAND.COM` (`/C`, or nothing for the prompt), which finds programs on the PATH and runs DOS's own commands; it stays in memory under the program, a few KB.
+
+## Copying, moving and deleting
+
+`fileops.c` does the work on full paths, folders and all, calling a progress function before each file (it draws the progress box, and Esc stops it):
+
+- **Copying** goes through a 32 KB DOS block, freed afterwards; a copy keeps its file's date (`_dos_setftime`) and attributes, and one that fails part way is removed rather than left half-written. A folder copies by making the folder, then copying what's in it.
+- **Moving** is a DOS rename where it can be: a file into any folder on the same drive, a folder within its own folder. Otherwise (another drive, or a folder to another folder) it's a copy, then a delete.
+- **Deleting** clears read-only, hidden and system first (it's been confirmed), and empties a folder one entry at a time, starting its search again each time: removing entries while DOS is still searching can make it skip some.
+- Nothing goes into itself (`path_inside`), and names are checked against the 8.3 rules (`path_valid_name`) before DOS is asked.
+
+Dragging a row starts once the pointer moves a few pixels with the button down (less is a click); an XOR outline follows it. Let go on a folder window, a folder in one, or a drive's icon, and it moves (the same drive) or copies (another drive, or with Ctrl, read from the BIOS's keyboard flags at `0040:0017`).
 
 ## Folders
 

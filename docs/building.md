@@ -14,7 +14,7 @@ Back to the [README](../README.md).
 ```sh
 make                # build/PETITE.EXE
 make test           # host unit tests (rectangles, number formatting), with ASan/UBSan
-make shots          # build/shots/{paper,ink}{0,1,2,3,5,6,8,12}.png, through DOSBox-X with no window
+make shots          # build/shots/{paper,ink}{0,1,2,3,5,6,8,12,14}.png, through DOSBox-X with no window
 tools/shot.sh savers  # build/shots/saver-NAME-{paper,ink}.png
 make dostest        # end-to-end tests in DOSBox-X: scanning, swapping, running games
 tools/run.sh        # try it: Paper on an emulated CGA at about PC/XT speed
@@ -36,13 +36,14 @@ CYCLES=max tools/run.sh   # flat out
 - `/SET` changes one setting and adds another, keeping the rest of `PETITE.CFG`;
 - the index holds the play stats from a `!GM_LOG.TXT` and GameMinder's other details;
 - File › Run…'s path runs a command through `COMMAND.COM` with its arguments, and within 8 KB of the memory it gets run directly; a batch file double-clicked in a folder runs;
-- the drives are found: C:, a second drive mounted as D: and a CD-ROM as E: (and DOSBox's own Z:), with no B:.
+- the drives are found: C:, a second drive mounted as D: and a CD-ROM as E: (and DOSBox's own Z:), with no B:;
+- a sequence of file operations: a folder copied to D: and moved back (whole, its dates kept, gone from D:), a file copied, moved into a new folder, the folder renamed and the file renamed, a folder refused a copy into itself, an overwrite refused, a tree copied then deleted.
 
 `KEEP=1 tools/dostest.sh` keeps the DOS drive it made, to look at.
 
 ## Screenshots
 
-`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu, 8 a window resized and another zoomed, 9 the About box, 12 the Run… box; 4, 7, 10 and 11 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
+`PETITE /SHOT=n /DUMP=FILE.BIN` draws a scene (0 the desktop, 1 the File menu open, 2 the Delete alert, 3 the games list, scanning the fixture games, 5 the editor, 6 the right-click menu, 8 a window resized and another zoomed, 9 the About box, 12 the Run… box, 14 deleting a folder; 4, 7, 10, 11 and 13 are for `tools/dostest.sh`), writes video memory exactly as it's laid out, and quits. `tools/shot.sh` runs that in DOSBox-X for both looks, on an emulated CGA for Paper and EGA for Ink, and `tools/dump2png.py` turns each dump into a PNG at 4:3. The pictures in [img/](img) come from it: after a change to the drawing, run `make shots` and look.
 
 ## CI
 

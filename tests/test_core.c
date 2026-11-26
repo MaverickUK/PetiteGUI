@@ -205,6 +205,16 @@ static void test_paths(void)
     CHECK(!path_is_text("GAME.EXE") && !path_is_text("TXT") && !path_is_text("X.TXTX") && !path_is_text("X.TX"));
     CHECK(strcmp(path_ext("A.B.C"), "C") == 0 && strcmp(path_ext("NOEXT"), "") == 0);
     CHECK(path_is_program("DOOM.EXE") && path_is_program("go.bat") && path_is_program("Command.Com"));
+
+    CHECK(path_join(p, sizeof p, "C:\\GAMES\\", "DOOM") && strcmp(p, "C:\\GAMES\\DOOM") == 0);
+    CHECK(!path_join(p, 8, "C:\\GAMES\\", "DOOM"));
+    CHECK(path_inside("C:\\GAMES\\DOOM", "C:\\GAMES\\") && path_inside("c:\\games", "C:\\GAMES\\"));
+    CHECK(path_inside("C:\\GAMES\\DOOM\\", "C:\\GAMES\\DOOM") && path_inside("C:\\ANY", "C:\\"));
+    CHECK(!path_inside("C:\\GAMESX", "C:\\GAMES\\") && !path_inside("C:\\GAME", "C:\\GAMES") && !path_inside("D:\\GAMES", "C:\\"));
+    CHECK(path_same_drive("C:\\A", "c:\\B") && !path_same_drive("C:\\A", "D:\\A"));
+    CHECK(path_valid_name("README.TXT") && path_valid_name("A") && path_valid_name("NEWFOLDR") && path_valid_name("A.B"));
+    CHECK(!path_valid_name("") && !path_valid_name("TOOLONGNAME") && !path_valid_name("A.TEXT") && !path_valid_name("A B"));
+    CHECK(!path_valid_name("*.TXT") && !path_valid_name("A.") && !path_valid_name(".TXT") && !path_valid_name("A:B") && !path_valid_name("A.B.C"));
     CHECK(!path_is_program("README.TXT") && !path_is_program("EXE") && !path_is_program("X.EXEC"));
 }
 

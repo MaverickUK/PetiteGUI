@@ -63,6 +63,7 @@ PETITE /CGA /SHOT=4 /DUMP=C:\\OUT\\BACK.BIN > C:\\OUT\\GUI.TXT
 PETITE /EGA /SHOT=10 /DUMP=C:\\OUT\\RUNCMD.BIN > C:\\OUT\\RUNCMDO.TXT
 PETITE /EGA /SHOT=11 /DUMP=C:\\OUT\\OPENBAT.BIN > C:\\OUT\\OPENBATO.TXT
 PETITE /DRIVES > C:\\OUT\\DRIVES.TXT
+PETITE /EGA /SHOT=13 /DUMP=C:\\OUT\\FILEOPS.BIN > C:\\OUT\\FILEOPSO.TXT
 PETITE /EGA /SHOT=7 /DUMP=C:\\OUT\\EDIT.BIN > C:\\OUT\\EDITRUN.TXT
 PETITE /CGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\CCYCLE.BIN
 PETITE /EGA /SAVER=cycle /STEPS=60 /DUMP=C:\\OUT\\ECYCLE.BIN
@@ -173,6 +174,24 @@ check(len(re.findall(r"free=", read("OUT", "BATCH.TXT"))) == 2, "a batch file do
 drives = read("OUT", "DRIVES.TXT")
 check("C: hard disk" in drives and "D: hard disk" in drives and "E: CD-ROM" in drives and "B:" not in drives,
       "the drives found: %s" % drives.strip().replace("\r", "").replace("\n", ", "))
+codes = read("OUT", "FILEOPS.TXT").split()
+check(codes == "0 0 0 0 0 0 7 6 0 0 0".split(),
+      "file operations returned what they should: %s" % " ".join(codes))
+def same(a, b):
+    a, b = os.path.join(w, *a), os.path.join(w, *b)
+    return os.path.exists(a) and os.path.exists(b) and open(a, "rb").read() == open(b, "rb").read()
+check(same(("OUT", "MEMBACK", "FREEMEM.EXE"), ("GAMES", "MEMTEST", "FREEMEM.EXE")) and
+      same(("OUT", "MEMBACK", "!GM_INFO.TXT"), ("GAMES", "MEMTEST", "!GM_INFO.TXT")),
+      "a folder copied to D: and moved back to C: arrived whole")
+t0 = os.path.getmtime(os.path.join(w, "GAMES", "MEMTEST", "!GM_INFO.TXT"))
+p1 = os.path.join(w, "OUT", "MEMBACK", "!GM_INFO.TXT")
+check(os.path.exists(p1) and abs(os.path.getmtime(p1) - t0) <= 2, "copies keep their files' dates")
+check(not os.path.exists(os.path.join(w, "DDRIVE", "MEMTEST")), "the move across drives took it off D:")
+check(same(("OUT", "MOVEDDIR", "RENAMED.BAT"), ("GAMES", "BATCH", "GO.BAT")),
+      "a file copied, moved into a new folder, the folder renamed, the file renamed")
+gone = [p for p in (("OUT", "GOCOPY.BAT"), ("OUT", "NEWDIR"), ("OUT", "DELME"), ("GAMES", "INSIDE"))
+        if os.path.exists(os.path.join(w, *p))]
+check(not gone, "and nothing left where it was moved or deleted from %s" % (gone or ""))
 print("%d failed" % len(fails))
 sys.exit(1 if fails else 0)
 EOF

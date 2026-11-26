@@ -82,3 +82,61 @@ int path_is_program(const char *name)
 
     return ext_in(name, exts, 3);
 }
+
+int path_join(char *out, int size, const char *dir, const char *name)
+{
+    size_t d = strlen(dir), n = strlen(name);
+
+    if ((int)(d + n + 1) > size)
+        return 0;
+    memcpy(out, dir, d);
+    memcpy(out + d, name, n + 1);
+    return 1;
+}
+
+static int path_len_trimmed(const char *p)
+{
+    int n = (int)strlen(p);
+
+    if (n > 3 && p[n - 1] == '\\') /* "C:\GAMES\" but not "C:\" */
+        n--;
+    return n;
+}
+
+int path_inside(const char *path, const char *dir)
+{
+    int pn = path_len_trimmed(path), dn = path_len_trimmed(dir), i;
+
+    if (pn < dn)
+        return 0;
+    for (i = 0; i < dn; i++)
+        if (toupper((unsigned char)path[i]) != toupper((unsigned char)dir[i]))
+            return 0;
+    return pn == dn || path[dn] == '\\' || dir[dn - 1] == '\\';
+}
+
+int path_same_drive(const char *a, const char *b)
+{
+    return a[0] && b[0] && a[1] == ':' && b[1] == ':' && toupper((unsigned char)a[0]) == toupper((unsigned char)b[0]);
+}
+
+int path_valid_name(const char *name)
+{
+    static const char bad[] = " .\"/\\[]:|<>+=;,*?";
+    int base = 0, ext = -1;
+    const char *p;
+
+    for (p = name; *p; p++) {
+        if (*p == '.' && ext < 0) {
+            ext = 0;
+            continue;
+        }
+        if ((unsigned char)*p < 32 || strchr(bad, *p) != NULL)
+            return 0;
+        if (ext < 0)
+            base++;
+        else
+            ext++;
+    }
+    return base >= 1 && base <= 8 && (ext < 0 || (ext >= 1 && ext <= 3));
+}

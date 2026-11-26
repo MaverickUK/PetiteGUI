@@ -2,6 +2,21 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.0] - 2026-11-26
+
+Looking after files: the second step of the [roadmap](ROADMAP.md).
+
+### Added
+
+- **Rename** (F2), **New folder** (F7), **Copy** (F5) and **Move** (F6), in the File menu and the right-click menu: the keys Norton Commander used. Names are checked against DOS's 8.3 rules first.
+- **Copy and Move** ask where, suggesting the folder in the window behind: a folder there means into it, a full path or a bare name means that's its new name. Folders copy and move with everything in them.
+- **Drag and drop:** drag a file or folder onto another folder window, onto a folder in one (`..` for the one above), or onto a drive's icon. Within a drive it moves; to another drive it copies; Ctrl makes it copy either way.
+- **Deleting folders**, after saying how much is in them ("Delete GAMES and its 214 files?").
+- A **progress box** for copying, moving and deleting, with how many files of how many; Esc stops it. Before replacing something, it asks.
+- A move within a drive is a DOS rename, so it's instant (a folder can only be renamed in place, so moving one elsewhere copies it); across drives it's a copy, then a delete. Copies keep their files' dates and attributes; a copy that fails part way leaves no half file; nothing can be copied or moved into itself.
+- If the file open in the editor is renamed or moved, the editor follows it; if it's deleted (with no changes), the editor closes.
+- `src/fileops.c`; host tests for the path checks (`path_join`, `path_inside`, `path_valid_name`); `/SHOT=13` runs a sequence of copies, moves, renames and deletes that `tools/dostest.sh` checks on the disk, and `/SHOT=14` asks to delete a folder.
+
 ## [0.7.0] - 2026-11-26
 
 Running anything, and every drive. The first step of the [roadmap](ROADMAP.md).
@@ -126,6 +141,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.8.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.8.0
 [0.7.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.7.0
 [0.6.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.6.0
 [0.5.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.5.0

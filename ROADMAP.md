@@ -12,10 +12,10 @@ Each step is a minor version. The numbers are the items' order in the original l
 - [x] **4. A text-entry box.** One-line text in an alert, with a caret, Backspace and Delete, Home and End, and Enter or Esc. Run… needs it first; Rename, New folder, Copy, Move and Find use it later.
 - [x] **7. Every drive.** An icon for each drive DOS has (B:, a CD-ROM, a network drive), found without touching a floppy drive, and B: only if there's a second floppy drive. Up to four folder windows open at once.
 
-## 0.8: look after files
+## 0.8: look after files (done in 0.8.0)
 
-- [ ] **5. Rename, New folder, and deleting folders.** Deleting a folder that isn't empty says how much it holds first ("Delete GAMES and its 214 files?").
-- [ ] **6. Copy and move,** from File › Copy… and Move…, or by dragging a file to another folder window or a drive icon. A move within a drive is a DOS rename, so it's instant; across drives it's a copy, then a delete, with progress shown.
+- [x] **5. Rename, New folder, and deleting folders.** Deleting a folder that isn't empty says how much it holds first ("Delete GAMES and its 214 files?").
+- [x] **6. Copy and move,** from File › Copy… and Move…, or by dragging a file to another folder window or a drive icon. A move within a drive is a DOS rename, so it's instant; across drives it's a copy, then a delete, with progress shown.
 
 ## 0.9: edit common files
 
