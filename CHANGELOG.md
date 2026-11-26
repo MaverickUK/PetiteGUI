@@ -18,5 +18,8 @@ The basics, in two looks.
 - Menus and alerts save the pixels under them and put them back; everything else redraws only what changed.
 - `/SHOT` and `/DUMP` for screenshots, `tools/shot.sh` and `tools/dump2png.py` to take them through DOSBox-X, `tools/run.sh` to try it.
 - Host unit tests, and CI that builds with Open Watcom v2.
+- Releases: a `vX.Y.Z` tag that matches `src/version.h` publishes a GitHub release with a zip, its checksum and this changelog's section as the notes.
+- `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
+- Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
 [0.1.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.1.0

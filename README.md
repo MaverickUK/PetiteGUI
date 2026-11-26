@@ -1,5 +1,14 @@
 # PetiteGUI
 
+<p>
+  <a href="https://github.com/MaverickUK/PetiteGUI/actions/workflows/build.yml"><img src="https://github.com/MaverickUK/PetiteGUI/actions/workflows/build.yml/badge.svg?branch=main" alt="Build and test"></a>
+  <a href="https://github.com/MaverickUK/PetiteGUI/actions/workflows/release.yml"><img src="https://github.com/MaverickUK/PetiteGUI/actions/workflows/release.yml/badge.svg" alt="Release workflow"></a>
+  <a href="https://github.com/MaverickUK/PetiteGUI/releases"><img src="https://img.shields.io/github/v/release/MaverickUK/PetiteGUI?include_prereleases&sort=semver" alt="Latest release"></a>
+  <a href="https://semver.org"><img src="https://img.shields.io/badge/versioning-SemVer-blue" alt="SemVer"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735" alt="Changelog"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-blue" alt="Licence: GPL-3.0"></a>
+</p>
+
 A small desktop for CGA and EGA PCs: a menu bar, windows, icons, alerts and the mouse, in 33 KB, for any 8088 or later.
 
 <img src="docs/img/paper1.png" alt="Paper: the File menu open over two windows, in black and white" width="400"> <img src="docs/img/ink2.png" alt="Ink: the Delete alert, in 16 colours" width="400">
@@ -41,7 +50,7 @@ Keys: Ctrl+O open, Ctrl+I info, Del delete, Ctrl+W close, ↑ ↓ select, Esc cl
 | [docs/design.md](docs/design.md) | How it's built: the drivers, drawing, redrawing, the mouse |
 | [docs/building.md](docs/building.md) | Building, the tests and the screenshots |
 | [docs/style-studies.html](docs/style-studies.html) | The four looks first drawn (Paper, Arcade, Ink, Bevel), and why Paper came first |
-| [CHANGELOG.md](CHANGELOG.md) | Every change |
+| [CHANGELOG.md](CHANGELOG.md) | Every change, by version |
 
 ## Licence
 

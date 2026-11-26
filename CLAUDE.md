@@ -28,4 +28,4 @@ The basics first: desktop, menu bar and menus, windows, icons, alerts, the point
 
 ## Versioning
 
-SemVer in `src/version.h`; bump it with any change, with a `CHANGELOG.md` entry.
+SemVer in `src/version.h` and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) section in `CHANGELOG.md` for every version. Any change to `src/` or the `Makefile` bumps the version and adds to the changelog in the same commit; other changes go into the unreleased version's section if there is one. `tools/check-changelog.sh origin/main` checks it (CI runs it on every push). A `vX.Y.Z` tag on `main` publishes the release ([docs/building.md](docs/building.md#releasing)).

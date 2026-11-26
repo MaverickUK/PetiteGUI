@@ -25,8 +25,28 @@ CYCLES=max tools/run.sh   # flat out
 
 ## CI
 
-`.github/workflows/build.yml` downloads Open Watcom on Ubuntu, builds `PETITE.EXE`, runs the host tests and keeps the executable as an artifact.
+`.github/workflows/build.yml` runs on every push to `main` and every pull request: it checks the version and changelog (below), downloads Open Watcom on Ubuntu, runs the host tests, builds `PETITE.EXE` and keeps it as an artifact.
 
-## Versioning
+## Versions and the changelog
 
-SemVer in `src/version.h` (`PETITE_VERSION`). Bump it with every change and add a `CHANGELOG.md` entry.
+The version is [SemVer](https://semver.org), in `src/version.h` (`PETITE_VERSION`), and every version has a section in [CHANGELOG.md](../CHANGELOG.md) ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)): `## [X.Y.Z] - YYYY-MM-DD`, what changed under Added, Changed, Fixed or Removed, and a link line at the bottom.
+
+- **Any change to what's built** (`src/`, the `Makefile`) bumps the version and adds to the changelog, in the same push. Patch for fixes, minor for new features, major for breaking changes (while it's 0.x, minor for anything notable).
+- **Other changes** (docs, tools, CI) go into the section of the version not yet released, if there is one.
+
+`tools/check-changelog.sh` enforces this, and CI runs it against the commit before each push (or a pull request's base): it fails when `src/` changed without a new version, or the version changed without the changelog. Run it before pushing:
+
+```sh
+tools/check-changelog.sh origin/main
+```
+
+## Releasing
+
+When a version is ready, on `main`:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` builds and tests the tag, checks it matches `PETITE_VERSION` and is on `main`, then publishes a GitHub release: `petitegui-X.Y.Z.zip` (`PETITE.EXE`, `LICENSE.TXT`, `CHANGES.TXT`), `SHA256SUMS`, and the version's changelog section as the notes. A version with a hyphen (`0.2.0-beta.1`) is marked as a pre-release.

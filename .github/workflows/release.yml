@@ -1,0 +1,70 @@
+name: Release
+
+# Pushing a tag vX.Y.Z that matches src/version.h builds and tests it, then publishes a
+# GitHub release with a zip (PETITE.EXE, the licence, the changelog), its checksum, and this
+# version's CHANGELOG.md section as the notes. See docs/building.md.
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag
+        id: version
+        run: |
+          # Releases come from main, and the tag must match the version
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
+          echo "version=$(tools/check-changelog.sh --tag "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: petite-exe
+          path: build
+
+      - name: Package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist/pkg
+          cp build/PETITE.EXE dist/pkg/
+          cp LICENSE dist/pkg/LICENSE.TXT
+          cp CHANGELOG.md dist/pkg/CHANGES.TXT
+          (cd dist/pkg && zip -q -9 "../petitegui-$VERSION.zip" PETITE.EXE LICENSE.TXT CHANGES.TXT)
+          (cd dist && sha256sum -- *.zip | tee SHA256SUMS)
+
+      - name: Release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            /^## \[/ || /^\[[^]]+\]: / { on = 0 }
+            on' CHANGELOG.md > notes.md
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          prerelease=""
+          [[ "$VERSION" == *-* ]] && prerelease="--prerelease"
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS \
+            --title "PetiteGUI $VERSION" --notes-file notes.md $prerelease
