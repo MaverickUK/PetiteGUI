@@ -558,10 +558,9 @@ static void set_hot(int hot)
 
 /* ---- Alerts ---- */
 
-static void show_alert(const char *line1, const char *line2, const char *b0, const char *b1, int cmd)
+/* Fill in the alert, with the "!" sign, ready for open_alert. */
+static void set_alert(const char *line1, const char *line2, const char *b0, const char *b1, int cmd)
 {
-    Rect r;
-
     strncpy(A.alert.line1, line1, sizeof A.alert.line1 - 1);
     strncpy(A.alert.line2, line2, sizeof A.alert.line2 - 1);
     A.alert.button[0] = b0;
@@ -569,6 +568,14 @@ static void show_alert(const char *line1, const char *line2, const char *b0, con
     A.alert.nbuttons = b0 == NULL ? 0 : (b1 ? 2 : 1);
     A.alert.cmd = cmd;
     A.alert.cmd_alt = CMD_NONE;
+    A.alert.logo = 0;
+}
+
+/* Lay out the alert as filled in, save what's under it and draw it. */
+static void open_alert(void)
+{
+    Rect r;
+
     alert_layout();
     r = A.alert.r;
     r.w += SHADOW_X;
@@ -578,6 +585,12 @@ static void show_alert(const char *line1, const char *line2, const char *b0, con
     A.alert_save = gfx_save(&r);
     draw_alert();
     mouse_show();
+}
+
+static void show_alert(const char *line1, const char *line2, const char *b0, const char *b1, int cmd)
+{
+    set_alert(line1, line2, b0, b1, cmd);
+    open_alert();
 }
 
 /* An alert whose first button runs a command too: "Don't save" / "Save". */
@@ -2650,7 +2663,9 @@ static void run(int cmd)
     switch (cmd) {
     case CMD_ABOUT:
         sprintf(line, "PetiteGUI %s, for CGA and EGA", PETITE_VERSION);
-        show_alert(line, "github.com/MaverickUK/PetiteGUI", "OK", NULL, CMD_NONE);
+        set_alert(line, "github.com/MaverickUK/PetiteGUI", "OK", NULL, CMD_NONE);
+        A.alert.logo = 1;
+        open_alert();
         break;
     case CMD_OPEN:
         if (f == GAMES_WIN)

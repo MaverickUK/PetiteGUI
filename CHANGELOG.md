@@ -2,6 +2,13 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.11.1] - 2026-11-27
+
+### Added
+
+- **A logo**: the pointer over an Ink window holding a yellow folder, in the EGA colours. **System › About** shows it in place of the "!" sign, drawn from the theme's colours (in Paper, with a striped title bar), each pixel two wide to suit the tall pixels.
+- The logo at the top of the README, and as its footer a banner the width of the page: the logo and the name on Ink's cyan and blue desktop. `tools/logo.js` (Node, standard library only) draws them: `docs/img/logo.png` and `logo-banner.png`.
+
 ## [0.11.0] - 2026-11-26
 
 Smoother, faster drawing: the roadmap's item 14. At PC/XT speed (`tools/bench.sh`, DOSBox-X at 300 cycles), before and after:
@@ -218,6 +225,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.11.1]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.11.1
 [0.11.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.11.0
 [0.10.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.10.0
 [0.9.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.9.0

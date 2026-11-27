@@ -114,6 +114,7 @@ typedef struct Alert {
     int nbuttons; /* the last is the default */
     int cmd;      /* run when the default (last) button is chosen */
     int cmd_alt;  /* run when the first of two is chosen (Esc runs neither) */
+    int logo;     /* PetiteGUI's logo in place of the "!" sign (the About box) */
     Rect r, b[2];
 } Alert;
 

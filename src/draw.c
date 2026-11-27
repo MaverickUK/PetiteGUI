@@ -870,15 +870,84 @@ void draw_desktop(const Rect *area)
 #define ALERT_PAD 16
 #define BUTTON_H 12
 
+/* PetiteGUI's logo, for the About box: the pointer over a window holding a folder. One
+ * character a pixel: K frame and outlines, S shadow, W window and pointer, T title bar, t the
+ * marks on it, Y the folder, . nothing. Each is drawn two pixels wide, so that on pixels 2.4
+ * times taller than wide it keeps close to its shape. tools/logo.js draws the same picture,
+ * with square pixels, for the README. */
+static const char *const LOGO[] = {
+    "KKKKKKKKKKKKKKKKKKK....",
+    "KTTTTTTTTTTTTTTTTTKS...",
+    "KTttTTTttttttTTTTTKS...",
+    "KTTTTTTTTTTTTTTTTTKS...",
+    "KKKKKKKKKKKKKKKKKKKS...",
+    "KWWWWWWWWWWWWWWWWWKS...",
+    "KWWKKKKWWWWWWWWWWWKS...",
+    "KWWKYYYKKKKKWWWWWWKS...",
+    "KWWKYYYYYYYKWWWWWWKS...",
+    "KWWKYYYYYYKKWWWWWWKS...",
+    "KWWKYYYYYYKKWWWWWWKS...",
+    "KWWKYYYYYYKWKWWWWWKS...",
+    "KWWKKKKKKKKWWKWWWWKS...",
+    "KWWWWWWWWWKWWWKWWWKS...",
+    "KKKKKKKKKKKWWWWKKKKS...",
+    ".SSSSSSSSSKWWWWWKSSS...",
+    "..........KWWWWWWK.....",
+    "..........KWWWWWWWK....",
+    "..........KWWWWKKKKK...",
+    "..........KWWKWWK......",
+    "..........KWK.KWWK.....",
+    "..........KK..KWWK.....",
+    "..........K....KWWK....",
+    "...............KWWK....",
+    "................KK.....",
+};
+#define LOGO_H ((int)(sizeof LOGO / sizeof LOGO[0]))
+#define LOGO_W (2 * 23)
+
+/* A logo pixel's colour, from the theme. Paper's title bar is striped, as its windows' are. */
+static uint8_t logo_colour(char part, int row)
+{
+    switch (part) {
+    case 'K': return T->frame;
+    case 'S': return T->shadow;
+    case 'W': return T->win_bg;
+    case 'T': return T->stripes ? ((row & 1) ? T->win_bg : T->frame) : T->title_on;
+    case 't': return T->stripes ? T->win_bg : T->title_on_text;
+    default:  return T->folder_fill;
+    }
+}
+
+/* One fill for each run of a colour along a row, not one for each pixel. */
+static void draw_logo(int x, int y)
+{
+    int r, i, end;
+    const char *row;
+
+    for (r = 0; r < LOGO_H; r++) {
+        row = LOGO[r];
+        for (i = 0; row[i] != '\0'; i = end) {
+            for (end = i; row[end] == row[i]; end++)
+                ;
+            if (row[i] != '.')
+                gfx_fill(x + 2 * i, y + r, 2 * (end - i), 1, logo_colour(row[i], r));
+        }
+    }
+}
+
+/* The alert's icon: the "!" sign, or the logo. */
+static int alert_icon_w(const Alert *a) { return a->logo ? LOGO_W : ALERT_ICON_W; }
+static int alert_body_h(const Alert *a) { return imax(a->logo ? LOGO_H : ALERT_ICON_H, 2 * ROW_H); }
+
 void alert_layout(void)
 {
     Alert *a = &A.alert;
     int line_w = imax(gfx_text_w(a->line1), gfx_text_w(a->line2));
-    int bw = 0, i, w, h, x, y, body = imax(ALERT_ICON_H, 2 * ROW_H), by, bx;
+    int bw = 0, i, w, h, x, y, body = alert_body_h(a), by, bx;
 
     for (i = 0; i < a->nbuttons; i++)
         bw = imax(bw, gfx_text_w(a->button[i]) + 16);
-    w = SNAP8_UP(ALERT_PAD * 2 + ALERT_ICON_W + 12 + line_w);
+    w = SNAP8_UP(ALERT_PAD * 2 + alert_icon_w(a) + 12 + line_w);
     w = imax(w, SNAP8_UP(ALERT_PAD * 2 + a->nbuttons * bw + (a->nbuttons - 1) * 16));
     h = 8 + 8 * 3 + body + BUTTON_H;
     x = SNAP8((SCREEN_W - w) / 2);
@@ -941,12 +1010,15 @@ void draw_alert(void)
 {
     const Alert *a = &A.alert;
     const Rect *r = &a->r;
-    int body = imax(ALERT_ICON_H, 2 * ROW_H), cy = r->y + 3 + 8, ax = r->x + ALERT_PAD, tx, ly, i;
+    int body = alert_body_h(a), cy = r->y + 3 + 8, ax = r->x + ALERT_PAD, tx, ly, i;
 
     dialog_frame(r);
-    dialog_icon(ax, cy, "!");
+    if (a->logo)
+        draw_logo(ax, cy);
+    else
+        dialog_icon(ax, cy, "!");
 
-    tx = ax + ALERT_ICON_W + 12;
+    tx = ax + alert_icon_w(a) + 12;
     ly = cy + (body - 2 * ROW_H) / 2 + 1;
     gfx_text(tx, ly, a->line1, T->text, 0);
     gfx_text(tx, ly + ROW_H, a->line2, T->text, 0);
