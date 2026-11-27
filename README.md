@@ -16,7 +16,7 @@ A small mouse based desktop for CGA and EGA PCs designed for simple file managem
 <img src="docs/img/ink6.png" alt="Ink: the right-click menu on a file in the C: window" width="400"> <img src="docs/img/ink5.png" alt="Ink: the text editor with a !GM_INFO.TXT open" width="400">
 <img src="docs/img/paper1.png" alt="Paper: the File menu open, in black and white" width="400"> <img src="docs/img/ink3.png" alt="Ink: the Games window listing four games with their years" width="400">
 
-**Status:** 0.11.1: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
+**Status:** 0.11.2: the basics, real folders, a text editor, GameMinder's games and screensavers. It runs in DOSBox-X on an emulated CGA and EGA; it hasn't been tried on a real PC yet.
 
 ## CGA, EGA and VGA support
 
@@ -36,6 +36,7 @@ A small mouse based desktop for CGA and EGA PCs designed for simple file managem
 - **Looking after files:** rename (F2), new folder (F7), copy (F5), move (F6) and delete, for files and whole folders, from the File menu, the right-click menu, or by dragging onto another window or a drive's icon. Shift-click, Ctrl-click, Shift with the arrows or Ctrl+A select several to copy, move, drag or delete together. Big jobs show their progress, and Esc stops them.
 - **Each file's date**, and sorting by name, size or date (the View menu). **Info** (Ctrl+I) shows a file's size, date and attributes, and switches read-only and hidden; hidden files show dimmed.
 - **Nine screensavers** (the **Saver** menu): colour cycling, blank, a starfield, lines, a maze that builds and solves itself, the desktop melting, Life grown from the desktop, a showcase of your GameMinder games, and a clock.
+- **Colour schemes** for Ink, in the Options menu: Classic, Slate, Ocean, Forest, Plum, Midnight, Rust and Teal. Each sets the desktop and the colour of title bars and selections, and PetiteGUI remembers the choice.
 - **The pointer**, drawn by the DOS mouse driver, as a squat arrow to suit the tall pixels.
 - **Your games**, from GameMinder's metadata: see below.
 
@@ -56,10 +57,13 @@ useems:true
 playstats:true
 saver:random
 saverdelay:5
+colours:classic
 gamecolumns:year,genre,plays
 ```
 
 `saver` is `off`, `random`, `cycle`, `blank`, `stars`, `lines`, `maze`, `melt`, `life`, `games` or `clock`; the Saver menu sets it and `saverdelay` (minutes) for you.
+
+`colours` is Ink's colour scheme: `classic`, `slate`, `ocean`, `forest`, `plum`, `midnight`, `rust` or `teal`; the Options menu sets it for you.
 
 `scanpath` defaults to the whole of `C:\`. Swap and launch files go in `%TEMP%`, or next to `PETITE.EXE`.
 

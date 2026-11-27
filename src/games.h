@@ -36,6 +36,7 @@ typedef struct Settings {
     int saver;           /* a saver's index, SAVER_OFF or SAVER_RANDOM (saver.h) */
     int saver_delay;     /* minutes without input before it starts */
     unsigned game_cols;  /* the Games window's columns besides the name (gamecols.h) */
+    int ink_scheme;      /* Ink's colour scheme: an index into ink_schemes (theme.h) */
 } Settings;
 
 extern Settings S;

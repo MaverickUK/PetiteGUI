@@ -27,6 +27,24 @@ typedef struct Theme {
 } Theme;
 
 extern const Theme theme_paper;
-extern const Theme theme_ink;
+/* Not const: its colour scheme can change (ink_scheme_apply). */
+extern Theme theme_ink;
+
+/* Ink's colour schemes, chosen in the Options menu and kept in PETITE.CFG as colours:key.
+ * Each sets only the desktop's checker and an accent for the active title bar and the
+ * selection, so every scheme still looks like PetiteGUI. */
+typedef struct InkScheme {
+    const char *name, *key;
+    uint8_t desk_on, desk_off; /* the same twice for a solid desktop */
+    uint8_t accent, accent_text;
+} InkScheme;
+
+#define INK_SCHEMES 8
+extern const InkScheme ink_schemes[INK_SCHEMES];
+
+/* A scheme's index from its key (any case), or -1. */
+int ink_scheme_by_key(const char *key);
+/* Set theme_ink's colours to scheme i's. */
+void ink_scheme_apply(int i);
 
 #endif

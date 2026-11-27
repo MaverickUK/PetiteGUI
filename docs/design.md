@@ -24,7 +24,7 @@ saver.c    the screensavers: choosing, running, waking; savers_*.c the nine of t
 saverlib.c their arithmetic, pure C (host tested): sine, Life, the maze, random numbers
 ```
 
-A **driver** (`gfx.h`'s `Driver`) knows one mode's memory layout and nothing else; it gets coordinates already clipped to the screen. **gfx** clips everything to the current clip rectangle first, so the widgets can draw anywhere. A **theme** (`theme.c`) is the colour table the widgets use. Paper is `drv_cga` with `theme_paper`, Ink is `drv_ega` with `theme_ink`: every widget is shared.
+A **driver** (`gfx.h`'s `Driver`) knows one mode's memory layout and nothing else; it gets coordinates already clipped to the screen. **gfx** clips everything to the current clip rectangle first, so the widgets can draw anywhere. A **theme** (`theme.c`) is the colour table the widgets use. Paper is `drv_cga` with `theme_paper`, Ink is `drv_ega` with `theme_ink`: every widget is shared. Ink's colour schemes (`ink_schemes`, chosen in the Options menu) change six of `theme_ink`'s colours in place: the desktop's two checker colours, and an accent and its text for the active title bar and the selection. Everything else stays, so each scheme still looks like PetiteGUI.
 
 ## The video modes
 

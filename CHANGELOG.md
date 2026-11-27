@@ -2,6 +2,13 @@
 
 All notable changes, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Versions follow [SemVer](https://semver.org/).
 
+## [0.11.2] - 2026-11-27
+
+### Added
+
+- **Colour schemes for Ink**, listed in the Options menu and ticked like the savers: Classic (Ink as it was), Slate, Ocean, Forest, Plum, Midnight, Rust and Teal. Each sets the desktop's checker (or a solid colour) and one accent for the active title bar and the selection; windows, menus and icons stay as they are. The choice applies at once and is kept in `PETITE.CFG` as `colours:ocean`. In Paper they're greyed out.
+- `/SHOT=24`: the Options menu with Ocean chosen. Host tests for finding and applying a scheme.
+
 ## [0.11.1] - 2026-11-27
 
 ### Added
@@ -225,6 +232,7 @@ The basics, in two looks.
 - `tools/check-changelog.sh`, run by CI on every push and pull request: the version is SemVer, this changelog has a dated section for it, and a change to what's built bumps the version and adds to the changelog.
 - Badges in the README: build, release, latest version, SemVer, changelog, licence.
 
+[0.11.2]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.11.2
 [0.11.1]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.11.1
 [0.11.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.11.0
 [0.10.0]: https://github.com/MaverickUK/PetiteGUI/releases/tag/v0.10.0

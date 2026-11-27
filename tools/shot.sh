@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Screenshots of every scene in both looks, through DOSBox-X with no window:
-# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6,8,12,14,15,17,18,20}.png.
+# Paper on an emulated CGA, Ink on an emulated EGA. Writes build/shots/{paper,ink}{0,1,2,3,5,6,8,12,14,15,17,18,20,24}.png.
 # Scene 3 opens the games list, scanning the fixture games in tests/dos/GAMES.
 #
-#   tools/shot.sh            all twenty-six
+#   tools/shot.sh            all twenty-eight
 #   tools/shot.sh paper 1    one
 #   tools/shot.sh savers     each screensaver in both looks, a few seconds in:
 #                            build/shots/saver-NAME-{paper,ink}.png (Colour cycle's palette turns
@@ -83,7 +83,7 @@ elif [ $# -eq 2 ]; then
     shoot "$1" "$2"
 else
     for look in paper ink; do
-        for scene in 0 1 2 3 5 6 8 12 14 15 17 18 20; do
+        for scene in 0 1 2 3 5 6 8 12 14 15 17 18 20 24; do
             shoot $look $scene
         done
     done

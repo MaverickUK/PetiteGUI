@@ -9,6 +9,7 @@
 #include "../src/saverlib.h"
 #include "../src/gamecols.h"
 #include "../src/field.h"
+#include "../src/theme.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -26,6 +27,26 @@ static int failures, checks;
 static int same(Rect r, int x, int y, int w, int h)
 {
     return r.x == x && r.y == y && r.w == w && r.h == h;
+}
+
+/* Ink's colour schemes: found by key in any case, and applied to theme_ink's accent. */
+static void test_ink_schemes(void)
+{
+    int i;
+
+    CHECK(ink_scheme_by_key("classic") == 0);
+    CHECK(ink_scheme_by_key("OCEAN") == 2);
+    CHECK(ink_scheme_by_key("teal") == INK_SCHEMES - 1);
+    CHECK(ink_scheme_by_key("beige") == -1);
+    CHECK(ink_scheme_by_key("") == -1);
+    for (i = 0; i < INK_SCHEMES; i++) /* every key finds its own scheme */
+        CHECK(ink_scheme_by_key(ink_schemes[i].key) == i);
+    ink_scheme_apply(2);
+    CHECK(theme_ink.desk_on == 9 && theme_ink.desk_off == 1);
+    CHECK(theme_ink.title_on == 3 && theme_ink.sel == 3);
+    CHECK(theme_ink.title_on_text == 0 && theme_ink.sel_text == 0);
+    ink_scheme_apply(0); /* Classic is Ink as first drawn */
+    CHECK(theme_ink.desk_on == 3 && theme_ink.desk_off == 1 && theme_ink.title_on == 1 && theme_ink.sel_text == 15);
 }
 
 static void test_intersect(void)
@@ -568,6 +589,7 @@ int main(void)
     test_segments();
     test_gamecols();
     test_field();
+    test_ink_schemes();
     printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

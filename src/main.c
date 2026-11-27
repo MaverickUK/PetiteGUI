@@ -63,6 +63,7 @@ enum {
 #define CMD_SAVER_PICK 300 /* + a saver's index + 2: SAVER_RANDOM is 300, SAVER_OFF 301 */
 #define CMD_SAVER_DELAY 400 /* + minutes */
 #define CMD_COLUMN 500 /* + COL_...: show or hide a Games window column */
+#define CMD_SCHEME 600 /* + an index into ink_schemes */
 
 static MenuItem system_items[] = {
     { "About PetiteGUI...", NULL, 0, CMD_ABOUT },
@@ -169,10 +170,21 @@ static MenuItem saver_items[] = { /* in the order of savers[] in saver.c */
 static MenuItem options_items[] = {
     { "Paper (CGA)", NULL, 0, CMD_PAPER },
     { "Ink (EGA)", NULL, 0, CMD_INK },
+    { "", NULL, MI_SEP, 0 },
+    { "Classic", NULL, 0, CMD_SCHEME + 0 }, /* in the order of ink_schemes */
+    { "Slate", NULL, 0, CMD_SCHEME + 1 },
+    { "Ocean", NULL, 0, CMD_SCHEME + 2 },
+    { "Forest", NULL, 0, CMD_SCHEME + 3 },
+    { "Plum", NULL, 0, CMD_SCHEME + 4 },
+    { "Midnight", NULL, 0, CMD_SCHEME + 5 },
+    { "Rust", NULL, 0, CMD_SCHEME + 6 },
+    { "Teal", NULL, 0, CMD_SCHEME + 7 },
 };
+#define OPTIONS_FIRST_SCHEME 3 /* the index of "Classic" in options_items */
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #define FILE_MENU 1
 #define EDIT_MENU 2
+#define OPTIONS_MENU 6
 #define FILE_DELETE FI_DELETE
 
 /* ---- Setting up ---- */
@@ -321,6 +333,7 @@ static void update_menus(void)
     const Row *row = w != NULL && w->kind == WIN_FILES && w->sel >= 0 && w->sel < w->nrows ? &w->rows[w->sel] : NULL;
     int file = row != NULL && !row->dir, up = row != NULL && strcmp(row->name, "..") == 0;
     int several = w != NULL && w->kind == WIN_FILES && selected_count(f) > 1;
+    int k;
 
     file_items[FI_OPEN_TEXT].flags = file_context[FC_OPEN_TEXT].flags = (uint8_t)(file && !several ? 0 : MI_OFF);
     {
@@ -358,8 +371,6 @@ static void update_menus(void)
             games_items[GAMES_FIRST_COLUMN + c].flags = (uint8_t)(S.game_cols & (1u << c) ? MI_CHECK : 0);
     }
     {
-        int k;
-
         for (k = 2; k < COUNT(saver_items); k++) {
             int cmd = saver_items[k].cmd;
 
@@ -380,6 +391,9 @@ static void update_menus(void)
     view_items[2].flags = (uint8_t)(A.sort_by == SORT_DATE ? MI_CHECK : 0);
     options_items[0].flags = (uint8_t)(A.theme == &theme_paper ? MI_CHECK : 0);
     options_items[1].flags = (uint8_t)(!A.has_ega ? MI_OFF : (A.theme == &theme_ink ? MI_CHECK : 0));
+    for (k = 0; k < INK_SCHEMES; k++) /* Ink's colours: no use in Paper */
+        options_items[OPTIONS_FIRST_SCHEME + k].flags =
+            (uint8_t)(A.theme != &theme_ink ? MI_OFF : (k == S.ink_scheme ? MI_CHECK : 0));
 }
 
 static int detect_ega(void)
@@ -2647,6 +2661,19 @@ static void switch_theme(const Driver *d, const Theme *t)
     mouse_show();
 }
 
+/* Ink's colour scheme: kept in PETITE.CFG, and shown at once if Ink is in use. */
+static void choose_scheme(int i)
+{
+    S.ink_scheme = i;
+    ink_scheme_apply(i);
+    settings_set("colours", ink_schemes[i].key);
+    if (A.theme == &theme_ink) {
+        mouse_hide();
+        draw_desktop(&FULL);
+        mouse_show();
+    }
+}
+
 static void info_dialog(int f);
 
 static void run(int cmd)
@@ -2741,6 +2768,8 @@ static void run(int cmd)
             toggle_column(cmd - CMD_COLUMN);
         else if (cmd >= CMD_SAVER_PICK && cmd < CMD_COLUMN)
             choose_saver(cmd);
+        else if (cmd >= CMD_SCHEME && cmd < CMD_SCHEME + INK_SCHEMES)
+            choose_scheme(cmd - CMD_SCHEME);
         break;
     case CMD_GAMES:
         open_games();
@@ -3339,6 +3368,12 @@ static int shot(int scene, const char *path)
     } else if (scene == 20) { /* the System menu, Quit highlighted */
         open_menu(0);
         set_hot(COUNT(system_items) - 1);
+    } else if (scene == 24) { /* the Options menu, Ocean chosen (not saved: shots leave PETITE.CFG be) */
+        S.ink_scheme = 2;
+        ink_scheme_apply(2);
+        draw_desktop(&FULL);
+        open_menu(OPTIONS_MENU);
+        set_hot(OPTIONS_FIRST_SCHEME + 2);
     } else if (scene == 9) { /* System > About */
         run(CMD_ABOUT);
     } else if (scene == 3) {
@@ -3536,6 +3571,7 @@ int main(int argc, char **argv)
         }
     }
     settings_load(argv[0]);
+    ink_scheme_apply(S.ink_scheme);
     old_video_mode = old_mode;
     if (set_arg != NULL) { /* /SET=key:value: change one setting in PETITE.CFG */
         char key[16];

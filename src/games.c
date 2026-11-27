@@ -7,6 +7,7 @@
 #include "gamecols.h"
 #include "gminfo.h"
 #include "saver.h"
+#include "theme.h"
 
 #define CONFIG_FILE "PETITE.CFG"
 #define INDEX_FILE "PETITE.IDX"
@@ -46,6 +47,7 @@ void settings_load(const char *argv0)
     S.saver = SAVER_RANDOM;
     S.saver_delay = 5;
     S.game_cols = 1u << COL_YEAR;
+    S.ink_scheme = 0;
     slash = strrchr(argv0, '\\');
     if (slash != NULL && slash - argv0 < (int)sizeof S.exe_dir - 1) {
         memcpy(S.exe_dir, argv0, (size_t)(slash - argv0 + 1));
@@ -80,6 +82,8 @@ void settings_load(const char *argv0)
             S.saver_delay = atoi(value);
         else if (strcmp(key, "GAMECOLUMNS") == 0)
             S.game_cols = gc_parse(value);
+        else if (strcmp(key, "COLOURS") == 0 && ink_scheme_by_key(value) >= 0)
+            S.ink_scheme = ink_scheme_by_key(value);
     }
     fclose(f);
 }
